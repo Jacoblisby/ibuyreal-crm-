@@ -1,0 +1,13 @@
+node_modules
+.next
+.git
+.env
+.env.local
+.env.*.local
+*.tsbuildinfo
+README.md
+DEPLOY.md
+.DS_Store
+.vscode
+.idea
+coverage

@@ -1,21 +1,21 @@
 # Deploy guide — iBuyReal CRM
 
-Production deploy via **Coolify** på `app.ibr.dk`.
+Production deploy via **Coolify** på `app.ibrc.dk`.
 
 ## Forudsætninger
 
 - Coolify-server kørende
-- DNS-adgang til `ibr.dk` (A-record til Coolify-server IP)
+- DNS-adgang til `ibrc.dk` (A-record til Coolify-server IP)
 - GitHub-repo: [Jacoblisby/ibuyreal-crm-](https://github.com/Jacoblisby/ibuyreal-crm-)
 
 ## Steps (engangs setup)
 
 ### 1. DNS
 
-Tilføj A-record på `ibr.dk`:
+Tilføj A-record på `ibrc.dk`:
 
 ```
-app.ibr.dk    A    <coolify-server-ip>    proxied=false
+app.ibrc.dk    A    <coolify-server-ip>    proxied=false
 ```
 
 ### 2. Postgres i Coolify
@@ -33,11 +33,11 @@ app.ibr.dk    A    <coolify-server-ip>    proxied=false
 4. Branch: `main`
 5. Build pack: **Dockerfile**
 6. Port: `3000`
-7. Domain: `https://app.ibr.dk`
+7. Domain: `https://app.ibrc.dk`
 8. Environment variables:
    ```
    DATABASE_URL=postgres://postgres:<pass>@ibuyreal-db:5432/postgres
-   NEXT_PUBLIC_APP_URL=https://app.ibr.dk
+   NEXT_PUBLIC_APP_URL=https://app.ibrc.dk
    NODE_ENV=production
    ```
 9. Deploy → vent på "running"
@@ -66,7 +66,7 @@ Kun nyttigt til demo — i prod fyldes DB'en op via on-market scrape og manuel i
 
 ### 6. Trigger første scrape
 
-Gå til `https://app.ibr.dk/on-market` og klik **"Scrape Boligsiden nu"**. Tager 6-8 sek og henter ~510 listings.
+Gå til `https://app.ibrc.dk/on-market` og klik **"Scrape Boligsiden nu"**. Tager 6-8 sek og henter ~510 listings.
 
 ## Re-deploy (efter kode-ændringer)
 

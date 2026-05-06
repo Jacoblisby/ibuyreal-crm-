@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1778053459500,
+      "tag": "0000_quiet_kree",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1778064307337,
+      "tag": "0001_harsh_omega_flight",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1778070667934,
+      "tag": "0002_strange_doctor_doom",
+      "breakpoints": true
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 /**
  * Boligsiden search-cases API integration.
  *
- * Bruges af `lib/scrape.ts` til at finde aktivt udbudte ejerlejligheder
+ * Bruges til at finde aktivt udbudte ejerlejligheder
  * i København + Frederiksberg.
  *
  * URL: GET https://api.boligsiden.dk/search/cases
@@ -57,6 +57,7 @@ interface SearchResponse {
 }
 
 export interface ScrapedListing {
+  caseId: string;
   slug: string;
   url: string;
   caseUrl: string | null;
@@ -134,8 +135,9 @@ function pickBestImage(img?: BoligsidenImage): string | null {
 }
 
 function parseCase(c: BoligsidenCase): ScrapedListing | null {
+  const caseId = c.caseID;
   const slug = c.slugAddress;
-  if (!slug) return null;
+  if (!caseId || !slug) return null;
   const addr = c.address ?? {};
   const buildings = addr.buildings ?? [];
   const building = buildings[0] ?? {};
@@ -158,6 +160,7 @@ function parseCase(c: BoligsidenCase): ScrapedListing | null {
   const primaryImage = pickBestImage(c.defaultImage) ?? galleryImages[0] ?? null;
 
   return {
+    caseId,
     slug,
     url: `https://www.boligsiden.dk/adresse/${slug}`,
     caseUrl: c.caseUrl ?? null,

@@ -1,6 +1,5 @@
 import { db } from '@/lib/db/client';
-import { onMarketCandidates, scrapeJobs } from '@/lib/db/schema';
-import { desc } from 'drizzle-orm';
+import { getOnMarketRows } from '@/lib/on-market';
 import { OnMarketClient } from './on-market-client';
 
 export const dynamic = 'force-dynamic';
@@ -9,16 +8,7 @@ export const metadata = { title: 'On-market — iBuyReal' };
 export default async function OnMarketPage() {
   if (!db) return <div className="text-sm text-slate-500">DB ikke konfigureret.</div>;
 
-  const rows = await db
-    .select()
-    .from(onMarketCandidates)
-    .orderBy(desc(onMarketCandidates.v3AfkastBest));
-
-  const [lastJob] = await db
-    .select()
-    .from(scrapeJobs)
-    .orderBy(desc(scrapeJobs.startedAt))
-    .limit(1);
+  const rows = await getOnMarketRows({ status: 'active' });
 
   return (
     <div className="space-y-6">
@@ -30,7 +20,7 @@ export default async function OnMarketPage() {
           </p>
         </div>
       </div>
-      <OnMarketClient initial={rows} lastJob={lastJob ?? null} />
+      <OnMarketClient initial={rows} />
     </div>
   );
 }

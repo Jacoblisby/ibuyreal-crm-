@@ -1,27 +1,49 @@
 /**
- * Drizzle DB-client.
- * DATABASE_URL: postgres://user:pass@host:port/dbname
+ * Drizzle DB-client — lazy initialisation.
+ *
+ * IBUYREAL_DB is set either by:
+ *   - .env.local (local dev)
+ *   - src/instrumentation.ts at Next.js startup (production: fetched from AWS Secrets Manager)
+ *
+ * The connection is created on first use so that instrumentation.ts has time to
+ * populate process.env.IBUYREAL_DB before any query is attempted.
  */
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema';
 
-const connectionString = process.env.DATABASE_URL;
+type DB = ReturnType<typeof drizzle<typeof schema>>;
 
-if (!connectionString) {
-  console.warn('[db] DATABASE_URL ikke sat — DB-queries vil fejle indtil den er konfigureret.');
-}
+let _db: DB | undefined;
 
-const queryClient = connectionString
-  ? postgres(connectionString, {
+function initDb(): DB {
+  if (_db) return _db;
+  const connectionString = process.env.IBUYREAL_DB;
+  if (!connectionString) {
+    throw new Error(
+      'IBUYREAL_DB not set. ' +
+        'For local dev run `npm run env:pull` to fetch credentials from AWS Secrets Manager, ' +
+        'or set IBUYREAL_DB manually in .env.local.',
+    );
+  }
+  _db = drizzle(
+    postgres(connectionString, {
       max: process.env.NODE_ENV === 'production' ? 10 : 5,
       idle_timeout: 20,
       connect_timeout: 10,
-    })
-  : (null as unknown as ReturnType<typeof postgres>);
+      ssl: 'require',
+      connection: { search_path: 'crm' },
+    }),
+    { schema, logger: process.env.NODE_ENV === 'development' },
+  );
+  return _db;
+}
 
-export const db = queryClient
-  ? drizzle(queryClient, { schema, logger: process.env.NODE_ENV === 'development' })
-  : (null as unknown as ReturnType<typeof drizzle<typeof schema>>);
+// Proxy so all call sites keep using `db.select(...)` etc. unchanged.
+export const db = new Proxy({} as DB, {
+  get(_, prop: string | symbol) {
+    return (initDb() as unknown as Record<string | symbol, unknown>)[prop];
+  },
+});
 
 export { schema };

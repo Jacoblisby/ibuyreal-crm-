@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
-import { antagelser } from '@/lib/db/schema';
+import { assumptions } from '@/lib/db/schema';
 
 export async function GET() {
   if (!db) return NextResponse.json({ error: 'DB ikke konfigureret' }, { status: 500 });
-  const [row] = await db.select().from(antagelser).where(eq(antagelser.id, 'default'));
+  const [row] = await db.select().from(assumptions).where(eq(assumptions.id, 'default'));
   if (!row) {
-    const [created] = await db.insert(antagelser).values({ id: 'default' }).returning();
+    const [created] = await db.insert(assumptions).values({ id: 'default' }).returning();
     return NextResponse.json(created);
   }
   return NextResponse.json(row);
@@ -26,9 +26,9 @@ export async function PATCH(req: Request) {
   }
 
   const [row] = await db
-    .update(antagelser)
+    .update(assumptions)
     .set({ ...allowed, updatedAt: new Date() })
-    .where(eq(antagelser.id, 'default'))
+    .where(eq(assumptions.id, 'default'))
     .returning();
   return NextResponse.json(row);
 }

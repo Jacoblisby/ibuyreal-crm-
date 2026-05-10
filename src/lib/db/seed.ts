@@ -1,5 +1,5 @@
 /**
- * Seed-data: 7 cases fra spec'en + default Antagelser-row.
+ * Seed-data: 7 cases fra spec'en + default Assumptions-row.
  *
  * Kør med: npm run db:seed
  */
@@ -7,7 +7,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { calculateProperty } from '../calculator';
 import type { Bydel } from '../types';
-import { antagelser, properties } from './schema';
+import { assumptions, properties } from './schema';
 
 interface SeedCase {
   address: string;
@@ -32,17 +32,17 @@ const SEED_CASES: SeedCase[] = [
 ];
 
 async function main() {
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error('DATABASE_URL ikke sat');
+  const url = process.env.IBUYREAL_DB;
+  if (!url) throw new Error('IBUYREAL_DB not set');
   const client = postgres(url, { max: 1 });
   const db = drizzle(client);
 
   console.log('→ Sletter eksisterende seed-data...');
   await db.delete(properties);
-  await db.delete(antagelser);
+  await db.delete(assumptions);
 
-  console.log('→ Indsætter default antagelser...');
-  await db.insert(antagelser).values({ id: 'default' });
+  console.log('→ Indsætter default assumptions...');
+  await db.insert(assumptions).values({ id: 'default' });
 
   console.log('→ Indsætter 7 seed cases (med beregnede tal)...');
   for (const c of SEED_CASES) {

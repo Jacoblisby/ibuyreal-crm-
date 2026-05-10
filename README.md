@@ -7,18 +7,24 @@ Internt CRM og beregningssystem til iBuyReal-fonden — screening, AVM-arbitrage
 - **Next.js 16** (App Router) + React 19
 - **TypeScript** strict
 - **Tailwind v4** (PostCSS plugin)
-- **Drizzle ORM** + `postgres` driver → lokal Postgres 16
+- **Drizzle ORM** + `postgres` driver → PostgreSQL 13+ (testet på PG18)
 - **Vitest** til pure-function tests af `lib/calculator.ts`
 
 Stacken matcher [crm-v2](../crm-v2) bevidst — to separate apps der kan låne mønstre af hinanden.
 
 ## Kom i gang
 
+### Forudsætninger
+- **Node.js 20** (tjek: `node -v`)
+- **PostgreSQL 13+** (valideret på PG18) — din eksisterende instans
+- **psql-klient** til at køre bootstrap-scriptet: `sudo apt install postgresql-client-common`
+
 ```bash
-# 1. Postgres (Homebrew)
-brew install postgresql@16
-brew services start postgresql@16
-createdb ibuyreal_crm
+# 1. Opret crm-schema og tabeller i din eksisterende database
+psql -d <din_database> -f sql/001_crm_bootstrap.sql
+
+# Verificer at alt er oprettet korrekt:
+psql -d <din_database> -f sql/002_crm_verify.sql
 
 # 2. Installer afhængigheder
 cd ibuyreal-crm
@@ -26,15 +32,18 @@ npm install
 
 # 3. Konfigurer env
 cp .env.local.example .env.local
-# (DATABASE_URL er allerede sat til lokal Postgres)
+# Sæt IBUYREAL_DB til din eksisterende database
+# (forbindelsen hentes fra SecretManager.IBUYREAL_DB — se .env.local.example)
 
-# 4. Push schema + seed
-npm run db:push
-npm run db:seed
-
-# 5. Start dev-server
+# 4. Start dev-server
 npm run dev    # → http://localhost:3000
 ```
+
+> **Seed-data** er ikke nødvendigt for at komme i gang. Kør `npm run db:seed`
+> kun hvis du vil have 7 demo-cases til at teste med.
+
+> **Docker** er ikke nødvendigt til lokal udvikling. Det bruges kun til
+> containeriseret deployment på AWS.
 
 ## Test
 
@@ -57,11 +66,11 @@ src/
   lib/
     calculator.ts         # ⭐ Forretningslogikken — pure functions
     calculator.test.ts    # Unit tests
-    constants.ts          # DEFAULT_ANTAGELSER
+    constants.ts          # DEFAULT_ASSUMPTIONS
     types.ts
     format.ts             # Intl-formattering (DKK, %)
     db/
-      schema.ts           # properties, investors, antagelser
+      schema.ts           # properties, investors, assumptions
       client.ts
       seed.ts             # 7 cases fra spec
 ```
@@ -76,7 +85,7 @@ src/
 - [x] **6. Pipeline kanban** — drag-and-drop status-skift
 - [x] **7. Excel eksport** — Screening Overblik V3 format med formler
 - [x] **8. Investor modul** — committed/deployed kapital + ejendomstildeling
-- [x] **9. Antagelser-side** — alle parametre med live preview pr. case
+- [x] **9. Assumptions-side** — alle parametre med live preview pr. case
 
 ## Sider
 
@@ -86,7 +95,7 @@ src/
 - `/cases/[id]` — Case-detalje med tilbudsmodul + status-skift + noter
 - `/pipeline` — Kanban med drag-drop
 - `/investors` — Investorer + kapitalallokering
-- `/settings` — Antagelser med live preview
+- `/settings` — Assumptions med live preview
 
 ## Forretningsregler
 

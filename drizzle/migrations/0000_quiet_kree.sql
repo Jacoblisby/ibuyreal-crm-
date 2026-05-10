@@ -1,4 +1,4 @@
-CREATE TABLE "antagelser" (
+CREATE TABLE "assumptions" (
 	"id" text PRIMARY KEY DEFAULT 'default' NOT NULL,
 	"adr_indreby" double precision DEFAULT 1609 NOT NULL,
 	"adr_vesterbro" double precision DEFAULT 1195 NOT NULL,

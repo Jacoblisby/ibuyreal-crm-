@@ -8,26 +8,26 @@ import {
   getStandFactor,
   maxTilbudspris,
 } from '@/lib/calculator';
-import { DEFAULT_ANTAGELSER } from '@/lib/constants';
-import type { OnMarketCandidate } from '@/lib/db/schema';
 import { formatKr, formatNum, formatPct } from '@/lib/format';
+import type { OnMarketListingRow } from '@/lib/on-market';
+import { bydelFromPostnr } from '@/lib/postnumre';
 import { BYDEL_LABEL } from '@/lib/status';
-import type { Bydel, Scenarie } from '@/lib/types';
+import type { Assumptions, Bydel, Scenarie } from '@/lib/types';
 
-type Review = 'ny' | 'interesseret' | 'passet' | 'importeret';
+type Review = 'new' | 'interested' | 'passed' | 'imported';
 
 const REVIEW_LABEL: Record<Review, string> = {
-  ny: 'Ny',
-  interesseret: 'Interesseret',
-  passet: 'Passet',
-  importeret: 'Importeret',
+  new: 'New',
+  interested: 'Interested',
+  passed: 'Passed',
+  imported: 'Imported',
 };
 
 const REVIEW_COLOR: Record<Review, string> = {
-  ny: 'bg-slate-100 text-slate-700',
-  interesseret: 'bg-emerald-100 text-emerald-700',
-  passet: 'bg-rose-100 text-rose-700',
-  importeret: 'bg-blue-100 text-blue-700',
+  new: 'bg-slate-100 text-slate-700',
+  interested: 'bg-emerald-100 text-emerald-700',
+  passed: 'bg-rose-100 text-rose-700',
+  imported: 'bg-blue-100 text-blue-700',
 };
 
 interface InputState {
@@ -49,7 +49,7 @@ interface InputState {
   betaBest: string;
 }
 
-function buildInitialInputs(c: OnMarketCandidate): InputState {
+function buildInitialInputs(c: OnMarketListingRow): InputState {
   const yearlyFaelles = c.monthlyExpense ? Math.round(c.monthlyExpense * 12) : 0;
   return {
     fmv: String(c.listPrice ?? 0), // FMV = list price indtil XGBoost-AVM
@@ -67,16 +67,21 @@ function buildInitialInputs(c: OnMarketCandidate): InputState {
   };
 }
 
-export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCandidate }) {
+export function CandidateDetail({
+  candidate: initial,
+  assumptions,
+}: {
+  candidate: OnMarketListingRow;
+  assumptions: Assumptions;
+}) {
   const router = useRouter();
   const [c, setC] = useState(initial);
-  const [activeImg, setActiveImg] = useState(0);
   const [busy, setBusy] = useState(false);
 
   const initialInputs = useMemo(() => buildInitialInputs(c), [c]);
   const [form, setForm] = useState<InputState>(initialInputs);
 
-  const bydel = (c.bydel ?? 'indre-by') as Bydel;
+  const bydel = (bydelFromPostnr(c.postalCode) ?? 'indre-by') as Bydel;
 
   // Facts fra scrape (ikke editable)
   const kvm = c.kvm ?? 0;
@@ -84,7 +89,7 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
   const bygaar = c.yearBuilt;
   const udbud = c.listPrice ?? 0;
 
-  // Live-beregning. Bygger en custom Antagelser inline med eventuelle
+  // Live-beregning. Bygger en custom Assumptions inline med eventuelle
   // overrides fra form (tomme felter → bydel-defaults).
   const live = useMemo(() => {
     if (!kvm || !udbud) return null;
@@ -97,8 +102,8 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
       (Number(form.ejFaelles) || 0) +
       (Number(form.ejOvrige) || 0);
 
-    // Bygd custom Antagelser
-    const baseA = DEFAULT_ANTAGELSER;
+    // Bygd custom Assumptions
+    const baseA = assumptions;
     const roomFactor = getRoomFactor(vaer, baseA);
     const standFactor = getStandFactor(bygaar, baseA);
 
@@ -164,9 +169,9 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
       ltRate,
       ltYearly,
       expatYearly,
-      antagelser: a,
+      assumptions: a,
     };
-  }, [form, bydel, kvm, vaer, bygaar, udbud]);
+  }, [assumptions, form, bydel, kvm, vaer, bygaar, udbud]);
 
   function update<K extends keyof InputState>(key: K, value: InputState[K]) {
     setForm((p) => ({ ...p, [key]: value }));
@@ -178,10 +183,10 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
       const r = await fetch(`/api/on-market/${c.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reviewStatus: rs }),
+        body: JSON.stringify({ reviewType: rs }),
       });
-      if (!r.ok) throw new Error('Update fejlede');
-      const updated = (await r.json()) as OnMarketCandidate;
+      if (!r.ok) throw new Error('Update failed');
+      const updated = (await r.json()) as OnMarketListingRow;
       setC(updated);
     } finally {
       setBusy(false);
@@ -189,95 +194,49 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
   }
 
   async function importToPipeline() {
-    if (!confirm('Importér til pipelinen som ny screening-case?')) return;
+    if (!confirm('Import to pipeline as new screening case?')) return;
     setBusy(true);
     try {
       const r = await fetch(`/api/on-market/${c.id}/import`, { method: 'POST' });
       if (!r.ok) {
         const err = await r.json().catch(() => ({}));
-        throw new Error(err.error ?? 'Import fejlede');
+        throw new Error(err.error ?? 'Import failed');
       }
       const data = (await r.json()) as { propertyId: string };
       router.push(`/cases/${data.propertyId}`);
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Fejl');
+      alert(e instanceof Error ? e.message : 'Error');
       setBusy(false);
     }
   }
 
-  const images = (c.images as string[] | null) ?? [];
-  const display = c.primaryImage && images.length === 0 ? [c.primaryImage] : images;
-  const review = c.reviewStatus as Review;
-  const importedAlready = !!c.convertedPropertyId;
+  const review = c.reviewType as Review;
 
   return (
     <div className="space-y-4">
-      {/* AVM-status banner */}
+      {/* AVM status banner */}
       <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">
-        <strong>FMV = listPris</strong> (iBuyReal AVM ikke wired endnu) — alpha bliver ~−0,6%
-        (kun tx-omkostning) indtil AVM giver os reel FMV. Profit i scenarierne kommer fra
-        beta + cf-yield. Justér FMV manuelt herover for at simulere AVM-output.
+        <strong>Prediction = list price</strong> (iBuyReal AVM not wired yet) — spread will be ~−0.6%
+        (only transaction cost) until AVM provides real prediction. Profit in scenarios comes from
+        configured beta + cf-yield. Override prediction manually above to simulate AVM output.
       </div>
 
-      {/* Image gallery + actions side-by-side */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
-        <div>
-          {display.length > 0 ? (
-            <div className="rounded-lg border border-slate-200 bg-white p-3">
-              <div className="aspect-video w-full overflow-hidden rounded-md bg-slate-100">
-                <img
-                  src={display[activeImg]}
-                  alt={c.address}
-                  className="h-full w-full object-cover"
-                />
-              </div>
-              {display.length > 1 && (
-                <div className="mt-2 grid grid-cols-8 gap-1.5 lg:grid-cols-10">
-                  {display.slice(0, 20).map((url, i) => (
-                    <button
-                      key={url + i}
-                      onClick={() => setActiveImg(i)}
-                      className={
-                        'aspect-square overflow-hidden rounded ring-2 transition ' +
-                        (activeImg === i ? 'ring-blue-500' : 'ring-transparent hover:ring-slate-300')
-                      }
-                    >
-                      <img src={url} alt="" className="h-full w-full object-cover" />
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="flex h-48 items-center justify-center rounded-lg border border-dashed border-slate-300 text-sm text-slate-400">
-              Ingen billeder
-            </div>
-          )}
-        </div>
-
-        <div className="space-y-3">
-          <Panel title="Handling">
+      {/* Actions + review */}
+      <div className="space-y-3">
+          <Panel title="Action">
             <div className="space-y-2">
-              {importedAlready ? (
-                <a
-                  href={`/cases/${c.convertedPropertyId}`}
-                  className="block w-full rounded-md bg-blue-600 px-3 py-2 text-center text-sm font-medium text-white hover:bg-blue-700"
-                >
-                  Åbn case i pipeline →
-                </a>
-              ) : (
-                <button
-                  onClick={importToPipeline}
-                  disabled={busy}
-                  className="w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
-                >
-                  Importér til pipeline
-                </button>
-              )}
+              <button
+                onClick={importToPipeline}
+                disabled={busy}
+                className="w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+              >
+                Import to pipeline
+              </button>
               <a
-                href={c.sourceUrl}
+                href={c.sourceUrl ?? '#'}
                 target="_blank"
                 rel="noopener noreferrer"
+                aria-disabled={!c.sourceUrl}
                 className="block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-center text-sm font-medium text-slate-700 hover:bg-slate-50"
               >
                 Boligsiden ↗
@@ -300,7 +259,7 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
                 <button
                   key={r}
                   onClick={() => setReview(r)}
-                  disabled={busy || review === r || importedAlready}
+                  disabled={busy || review === r}
                   className={
                     'flex w-full items-center justify-between rounded-md px-3 py-1.5 text-sm transition ' +
                     (review === r ? REVIEW_COLOR[r] + ' font-medium' : 'hover:bg-slate-50 text-slate-700')
@@ -312,41 +271,40 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
               ))}
             </div>
           </Panel>
-        </div>
       </div>
 
-      {/* Facts (read-only fra scrape) */}
+      {/* Facts (read-only from scrape) */}
       <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-4">
         <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Bolig (fra Boligsiden)
+          Property (from Boligsiden)
         </div>
         <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-6">
-          <Fact label="Bydel" value={BYDEL_LABEL[bydel] ?? bydel} />
-          <Fact label="kvm" value={kvm ? `${kvm} m²` : '–'} />
-          <Fact label="Værelser" value={String(vaer)} />
-          <Fact label="Byggeår" value={bygaar ? String(bygaar) : '–'} />
-          <Fact label="Udbudspris" value={formatKr(udbud)} />
-          <Fact label="Dage på markedet" value={c.daysOnMarket ? `${c.daysOnMarket}d` : '–'} />
+          <Fact label="District" value={BYDEL_LABEL[bydel] ?? bydel} />
+          <Fact label="sqm" value={kvm ? `${kvm} m²` : '–'} />
+          <Fact label="Rooms" value={String(vaer)} />
+          <Fact label="Built" value={bygaar ? String(bygaar) : '–'} />
+          <Fact label="List price" value={formatKr(udbud)} />
+          <Fact label="Days on market" value={c.daysOnMarket ? `${c.daysOnMarket}d` : '–'} />
         </div>
       </div>
 
-      {/* Antagelser (editable) */}
+      {/* Assumptions (editable) */}
       <div className="rounded-lg border border-slate-200 bg-white p-5">
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-slate-900">Antagelser (live recalc)</h3>
+          <h3 className="text-sm font-semibold text-slate-900">Assumptions (live recalc)</h3>
           <button
             onClick={() => setForm(initialInputs)}
             className="text-xs text-slate-500 hover:text-slate-900"
           >
-            Nulstil
+            Reset
           </button>
         </div>
 
-        {/* Pris */}
+        {/* Price */}
         <div className="mb-3">
-          <div className="mb-1.5 text-xs font-medium uppercase tracking-wide text-slate-400">Pris</div>
+          <div className="mb-1.5 text-xs font-medium uppercase tracking-wide text-slate-400">Price</div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Field label="FMV (kr)" hint="iBuyReal AVM-værdi">
+            <Field label="Prediction (kr)" hint="iBuyReal AVM value">
               <input
                 type="number"
                 value={form.fmv}
@@ -354,7 +312,7 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
                 className="form-input"
               />
             </Field>
-            <Field label="Tilbudspris (kr)" hint="default = udbudspris">
+            <Field label="Offer price (kr)" hint="default = list price">
               <input
                 type="number"
                 value={form.tilbudPris}
@@ -415,9 +373,9 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
             <Field
               label="ADR (kr/nat)"
               hint={`default ≈ ${formatKr(
-                DEFAULT_ANTAGELSER.adr[bydel] *
-                  getRoomFactor(vaer) *
-                  getStandFactor(bygaar),
+                assumptions.adr[bydel] *
+                  getRoomFactor(vaer, assumptions) *
+                  getStandFactor(bygaar, assumptions),
               )}`}
             >
               <input
@@ -430,7 +388,7 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
             </Field>
             <Field
               label="Belægning (%)"
-              hint={`default ${DEFAULT_ANTAGELSER.occ[bydel]}%`}
+              hint={`default ${assumptions.occ[bydel]}%`}
             >
               <input
                 type="number"
@@ -442,7 +400,7 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
             </Field>
             <Field
               label="Langtidsleje (kr/m²/mdr)"
-              hint={`default ${DEFAULT_ANTAGELSER.langtidsleje[bydel]}`}
+              hint={`default ${assumptions.langtidsleje[bydel]}`}
             >
               <input
                 type="number"
@@ -461,7 +419,7 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
             Markedsudvikling — beta i % (tom = default)
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <Field label="Worst (%)" hint={`default ${DEFAULT_ANTAGELSER.beta.worst}`}>
+            <Field label="Worst (%)" hint={`default ${assumptions.beta.worst}`}>
               <input
                 type="number"
                 step="0.1"
@@ -471,7 +429,7 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
                 className="form-input"
               />
             </Field>
-            <Field label="Base (%)" hint={`default ${DEFAULT_ANTAGELSER.beta.base}`}>
+            <Field label="Base (%)" hint={`default ${assumptions.beta.base}`}>
               <input
                 type="number"
                 step="0.1"
@@ -481,7 +439,7 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
                 className="form-input"
               />
             </Field>
-            <Field label="Best (%)" hint={`default ${DEFAULT_ANTAGELSER.beta.best}`}>
+            <Field label="Best (%)" hint={`default ${assumptions.beta.best}`}>
               <input
                 type="number"
                 step="0.1"
@@ -530,19 +488,19 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
               label="Worst case"
               scenarie="worst"
               data={live.calc.worst}
-              desc="Langtidsleje, 0% beta"
+              desc={`Langtidsleje, ${live.assumptions.beta.worst}% beta`}
             />
             <ScenarioCard
               label="Base case"
               scenarie="base"
               data={live.calc.base}
-              desc="Expat (+30%), 7% beta"
+              desc={`Expat (+30%), ${live.assumptions.beta.base}% beta`}
             />
             <ScenarioCard
               label="Best case"
               scenarie="best"
               data={live.calc.best}
-              desc="Airbnb, 14.8% beta"
+              desc={`Airbnb, ${live.assumptions.beta.best}% beta`}
             />
           </div>
 
@@ -705,8 +663,7 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
               <Panel title="Mægler">
                 <div className="space-y-1.5 text-sm">
                   <Row label="kr/m² (udbud)" value={c.perAreaPrice ? formatKr(c.perAreaPrice) : '–'} />
-                  <Row label="Mægler" value={c.realtorName ?? c.brokerKind ?? '–'} />
-                  <Row label="Type" value={c.brokerKind ?? '–'} muted />
+                  <Row label="Mægler" value={c.realtorName ?? '–'} />
                 </div>
               </Panel>
             </div>

@@ -4,8 +4,8 @@
   "version": "7",
   "dialect": "postgresql",
   "tables": {
-    "public.antagelser": {
-      "name": "antagelser",
+    "public.assumptions": {
+      "name": "assumptions",
       "schema": "",
       "columns": {
         "id": {

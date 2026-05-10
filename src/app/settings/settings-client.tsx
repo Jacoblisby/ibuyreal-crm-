@@ -2,62 +2,12 @@
 
 import { useMemo, useState } from 'react';
 import { calculateProperty } from '@/lib/calculator';
-import type { AntagelserRow, Property } from '@/lib/db/schema';
+import { rowToAssumptions } from '@/lib/assumptions';
+import type { AssumptionsRow, Property } from '@/lib/db/schema';
 import { formatKr, formatPct } from '@/lib/format';
-import type { Antagelser, Bydel } from '@/lib/types';
+import type { Bydel } from '@/lib/types';
 
-function rowToAntagelser(r: AntagelserRow): Antagelser {
-  return {
-    adr: {
-      'indre-by': r.adrIndreby,
-      vesterbro: r.adrVesterbro,
-      noerrebro: r.adrNoerrebro,
-      'oesterbro': r.adrOsterbro,
-      frederiksberg: r.adrFrederiksberg,
-      amager: r.adrAmager,
-    },
-    occ: {
-      'indre-by': r.occIndreby,
-      vesterbro: r.occVesterbro,
-      noerrebro: r.occNoerrebro,
-      'oesterbro': r.occOsterbro,
-      frederiksberg: r.occFrederiksberg,
-      amager: r.occAmager,
-    },
-    langtidsleje: {
-      'indre-by': r.ltIndreby,
-      'oesterbro': r.ltOsterbro,
-      noerrebro: r.ltNoerrebro,
-      vesterbro: r.ltVesterbro,
-      frederiksberg: r.ltFrederiksberg,
-      amager: r.ltAmager,
-    },
-    room: {
-      studio: r.roomStudio,
-      v1: r.room1v,
-      v2: r.room2v,
-      v3: r.room3v,
-      v4: r.room4v,
-    },
-    stand: {
-      luksus: r.standLuksus,
-      god: r.standGod,
-      aeldre: r.standAeldre,
-    },
-    platformPct: r.platformPct,
-    rengoringKr: r.rengoringKr,
-    naetterPerBooking: r.naetterPerBooking,
-    adminPct: r.adminPct,
-    afslagPct: r.afslagPct,
-    convFeePct: r.convFeePct,
-    maeglerSparKr: r.maeglerSparKr,
-    txFastKr: r.txFastKr,
-    txPct: r.txPct,
-    beta: { worst: r.betaWorst, base: r.betaBase, best: r.betaBest },
-  };
-}
-
-const FIELDS: { key: keyof AntagelserRow; label: string; group: string; suffix?: string }[] = [
+const FIELDS: { key: keyof AssumptionsRow; label: string; group: string; suffix?: string }[] = [
   // ADR
   { key: 'adrIndreby', label: 'Indre By', group: 'Airbnb base ADR (kr/nat)', suffix: 'kr' },
   { key: 'adrVesterbro', label: 'Vesterbro', group: 'Airbnb base ADR (kr/nat)', suffix: 'kr' },
@@ -108,21 +58,21 @@ const FIELDS: { key: keyof AntagelserRow; label: string; group: string; suffix?:
 ];
 
 export function SettingsClient({
-  antagelser,
+  assumptions,
   cases,
 }: {
-  antagelser: AntagelserRow;
+  assumptions: AssumptionsRow;
   cases: Property[];
 }) {
-  const [draft, setDraft] = useState<AntagelserRow>(antagelser);
-  const [original] = useState<AntagelserRow>(antagelser);
+  const [draft, setDraft] = useState<AssumptionsRow>(assumptions);
+  const [original] = useState<AssumptionsRow>(assumptions);
   const [previewId, setPreviewId] = useState<string>(cases[0]?.id ?? '');
   const [saving, setSaving] = useState(false);
 
   const dirty = useMemo(() => {
     return Object.keys(draft).some((k) => {
-      const a = draft[k as keyof AntagelserRow];
-      const b = original[k as keyof AntagelserRow];
+      const a = draft[k as keyof AssumptionsRow];
+      const b = original[k as keyof AssumptionsRow];
       if (typeof a === 'number' && typeof b === 'number') return Math.abs(a - b) > 1e-9;
       return false;
     });
@@ -140,7 +90,7 @@ export function SettingsClient({
           fmv: previewCase.fmv ?? previewCase.udbud,
           ejTotal: previewCase.ejTotal ?? 0,
         },
-        rowToAntagelser(original),
+        rowToAssumptions(original),
       )
     : null;
   const previewAfter = previewCase
@@ -154,11 +104,11 @@ export function SettingsClient({
           fmv: previewCase.fmv ?? previewCase.udbud,
           ejTotal: previewCase.ejTotal ?? 0,
         },
-        rowToAntagelser(draft),
+        rowToAssumptions(draft),
       )
     : null;
 
-  function update(key: keyof AntagelserRow, value: string) {
+  function update(key: keyof AssumptionsRow, value: string) {
     const n = parseFloat(value);
     setDraft((d) => ({ ...d, [key]: Number.isFinite(n) ? n : 0 }));
   }
@@ -174,7 +124,7 @@ export function SettingsClient({
         body: JSON.stringify(rest),
       });
       if (!res.ok) throw new Error('Save fejlede');
-      alert('Antagelser gemt');
+      alert('Assumptions gemt');
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Fejl');
     } finally {

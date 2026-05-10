@@ -3,13 +3,13 @@
  *
  * iBuyReal har en proprietær XGBoost-baseret AVM-model der lever uden for
  * dette repo (Python/notebook). Indtil den er wired ind via HTTP eller
- * pickle-fil, bruger vi `latestValuation` fra Boligsiden som placeholder-FMV.
+ * pickle-fil, bruger vi fallback-logik som placeholder-FMV.
  *
  * Erstat `estimateFmv` med rigtig AVM-kald når den er klar — alle andre
  * kalkulationer bør være uændrede.
  */
 
-export type FmvSource = 'boligsiden-bs-avm' | 'ibuyreal-avm' | 'manual' | 'list-price-fallback';
+export type FmvSource = 'ibuyreal-avm' | 'list-price-fallback';
 
 export interface FmvEstimate {
   fmv: number;

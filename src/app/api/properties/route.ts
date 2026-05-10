@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
+import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { calculateProperty } from '@/lib/calculator';
+import { rowToAssumptions } from '@/lib/assumptions';
 import { db } from '@/lib/db/client';
-import { properties } from '@/lib/db/schema';
+import { assumptions, properties } from '@/lib/db/schema';
 import { PROPERTY_STATUS } from '@/lib/db/schema';
 import type { Bydel } from '@/lib/types';
 
@@ -37,6 +39,8 @@ export async function POST(req: Request) {
   }
   const data = parsed.data;
   const ejTotal = data.ejSkat + data.ejGrundskyld + data.ejFaelles + data.ejOvrige;
+  const [assumptionsRow] = await db.select().from(assumptions).where(eq(assumptions.id, 'default'));
+  const assumptionsConfig = rowToAssumptions(assumptionsRow);
 
   const calc = calculateProperty({
     bydel: data.bydel as Bydel,
@@ -47,7 +51,7 @@ export async function POST(req: Request) {
     fmv: data.fmv,
     ejTotal,
     tilbudPris: data.tilbudPris ?? undefined,
-  });
+  }, assumptionsConfig);
 
   const [row] = await db
     .insert(properties)

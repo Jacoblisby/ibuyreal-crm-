@@ -6,9 +6,9 @@ import { calculateProperty, maxTilbudspris } from '@/lib/calculator';
 import type { Property } from '@/lib/db/schema';
 import { formatKr, formatNum, formatPct } from '@/lib/format';
 import { BYDEL_LABEL, STATUS_COLOR, STATUS_LABEL, STATUS_ORDER } from '@/lib/status';
-import type { Bydel, PropertyStatus, Scenarie } from '@/lib/types';
+import type { Assumptions, Bydel, PropertyStatus, Scenarie } from '@/lib/types';
 
-export function CaseDetail({ property: initial }: { property: Property }) {
+export function CaseDetail({ property: initial, assumptions }: { property: Property; assumptions: Assumptions }) {
   const router = useRouter();
   const [property, setProperty] = useState(initial);
   const [tilbudPris, setTilbudPris] = useState<string>(
@@ -27,13 +27,13 @@ export function CaseDetail({ property: initial }: { property: Property }) {
     fmv: property.fmv ?? property.udbud,
     ejTotal: property.ejTotal ?? 0,
     tilbudPris: tilbud,
-  });
+  }, assumptions);
   const max = maxTilbudspris({
     bydel: property.bydel as Bydel,
     kvm: property.kvm,
     fmv: property.fmv ?? property.udbud,
     ejTotal: property.ejTotal ?? 0,
-  });
+  }, assumptions);
 
   async function save(patch: Partial<Property>) {
     setSaving(true);
@@ -124,9 +124,24 @@ export function CaseDetail({ property: initial }: { property: Property }) {
 
         {/* Scenario cards */}
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <ScenarioCard label="Worst case" scenarie="worst" data={calc.worst} desc="Langtidsleje + 0% beta" />
-          <ScenarioCard label="Base case" scenarie="base" data={calc.base} desc="Expat (+30%) + 7% beta" />
-          <ScenarioCard label="Best case" scenarie="best" data={calc.best} desc="Airbnb + 14.8% beta" />
+          <ScenarioCard
+            label="Worst case"
+            scenarie="worst"
+            data={calc.worst}
+            desc={`Langtidsleje + ${assumptions.beta.worst}% beta`}
+          />
+          <ScenarioCard
+            label="Base case"
+            scenarie="base"
+            data={calc.base}
+            desc={`Expat (+30%) + ${assumptions.beta.base}% beta`}
+          />
+          <ScenarioCard
+            label="Best case"
+            scenarie="best"
+            data={calc.best}
+            desc={`Airbnb + ${assumptions.beta.best}% beta`}
+          />
         </div>
 
         {/* Notes */}

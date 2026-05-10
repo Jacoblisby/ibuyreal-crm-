@@ -1,8 +1,18 @@
 import { CalculatorClient } from './calculator-client';
+import { eq } from 'drizzle-orm';
+import { rowToAssumptions } from '@/lib/assumptions';
+import { db } from '@/lib/db/client';
+import { assumptions } from '@/lib/db/schema';
 
 export const metadata = { title: 'Boligberegner — iBuyReal' };
 
-export default function CalculatorPage() {
+export default async function CalculatorPage() {
+  const assumptionsConfig = db
+    ? rowToAssumptions(
+        (await db.select().from(assumptions).where(eq(assumptions.id, 'default')))[0],
+      )
+    : rowToAssumptions(null);
+
   return (
     <div className="space-y-6">
       <div>
@@ -11,7 +21,7 @@ export default function CalculatorPage() {
           Tast en case ind — alpha, beta og cf-yield beregnes live.
         </p>
       </div>
-      <CalculatorClient />
+      <CalculatorClient assumptions={assumptionsConfig} />
     </div>
   );
 }

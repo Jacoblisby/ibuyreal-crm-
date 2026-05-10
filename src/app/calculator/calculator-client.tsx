@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { calculateProperty, maxTilbudspris } from '@/lib/calculator';
 import { formatKr, formatNum, formatPct } from '@/lib/format';
-import type { Bydel, PropertyStatus, Scenarie } from '@/lib/types';
+import type { Assumptions, Bydel, PropertyStatus, Scenarie } from '@/lib/types';
 
 const BYDELER: { value: Bydel; label: string }[] = [
   { value: 'indre-by', label: 'Indre By' },
@@ -48,7 +48,7 @@ const DEFAULT_FORM: FormState = {
   tilbudPris: '',
 };
 
-export function CalculatorClient() {
+export function CalculatorClient({ assumptions }: { assumptions: Assumptions }) {
   const [form, setForm] = useState<FormState>(DEFAULT_FORM);
   const [saved, setSaved] = useState<{ id: string } | null>(null);
   const [saving, setSaving] = useState(false);
@@ -77,11 +77,11 @@ export function CalculatorClient() {
       fmv,
       ejTotal,
       tilbudPris,
-    });
-    const max = maxTilbudspris({ bydel: form.bydel, kvm, fmv, ejTotal });
+    }, assumptions);
+    const max = maxTilbudspris({ bydel: form.bydel, kvm, fmv, ejTotal }, assumptions);
     const afvigelse = (udbud - fmv) / fmv;
     return { calc, max, afvigelse, ejTotal };
-  }, [form]);
+  }, [assumptions, form]);
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -323,17 +323,17 @@ export function CalculatorClient() {
             <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
               <ScenarioCard
                 label="Worst case"
-                desc="Langtidsleje + 0% beta"
+                desc={`Langtidsleje + ${assumptions.beta.worst}% beta`}
                 {...result.calc.worst}
               />
               <ScenarioCard
                 label="Base case"
-                desc="Expat (+30%) + 7% beta"
+                desc={`Expat (+30%) + ${assumptions.beta.base}% beta`}
                 {...result.calc.base}
               />
               <ScenarioCard
                 label="Best case"
-                desc="Airbnb + 14.8% beta"
+                desc={`Airbnb + ${assumptions.beta.best}% beta`}
                 {...result.calc.best}
               />
             </div>

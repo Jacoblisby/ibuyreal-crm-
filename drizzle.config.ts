@@ -5,7 +5,7 @@ export default {
   out: './drizzle/migrations',
   dialect: 'postgresql',
   dbCredentials: {
-    url: process.env.DATABASE_URL || 'postgres://placeholder',
+    url: process.env.IBUYREAL_DB || 'postgres://placeholder',
   },
   migrations: {
     prefix: 'index',

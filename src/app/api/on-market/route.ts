@@ -1,22 +1,19 @@
 import { NextResponse } from 'next/server';
-import { and, desc, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
-import { onMarketCandidates } from '@/lib/db/schema';
+import { getOnMarketRows } from '@/lib/on-market';
 
 export async function GET(req: Request) {
-  if (!db) return NextResponse.json({ error: 'DB ikke konfigureret' }, { status: 500 });
+  if (!db) return NextResponse.json({ error: 'DB not configured' }, { status: 500 });
   const url = new URL(req.url);
-  const status = url.searchParams.get('status') ?? 'active';
+  const status = (url.searchParams.get('status') ?? 'active') as 'active' | 'sold' | 'ignored';
   const review = url.searchParams.get('review');
 
-  const conds = [eq(onMarketCandidates.status, status)];
-  if (review) conds.push(eq(onMarketCandidates.reviewStatus, review));
-
-  const rows = await db
-    .select()
-    .from(onMarketCandidates)
-    .where(and(...conds))
-    .orderBy(desc(onMarketCandidates.estimatedAlpha));
+  const rows = await getOnMarketRows({
+    status,
+    review: review
+      ? (review as 'new' | 'interested' | 'passed' | 'imported')
+      : undefined,
+  });
 
   return NextResponse.json(rows);
 }

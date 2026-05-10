@@ -1,0 +1,40 @@
+[build-system]
+requires = ["poetry-core>=1.9.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "ibuyreal-crm-python"
+version = "0.1.0"
+description = "Python utilities used by the iBuyReal CRM repository"
+authors = ["iBuyReal"]
+readme = "README.md"
+packages = [{ include = "src" }]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+boto3 = "^1.43.2"
+botocore = { extras = ["crt"], version = "^1.43.2" }
+pandas = "^2.2.3"
+geopandas = "^1.1.1"
+sqlalchemy = "^2.0.49"
+geoalchemy2 = "^0.17.1"
+psycopg2-binary = "^2.9.12"
+
+[tool.poetry.group.dev.dependencies]
+mypy = "^1.14.1"
+pytest = "^9.0.3"
+boto3-stubs = {extras = ["secretsmanager", "s3"], version = "^1.43.2"}
+
+[tool.mypy]
+check_untyped_defs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+disallow_any_generics = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unreachable = true
+strict_equality = true
+no_implicit_reexport = true
+no_implicit_optional = true
+verbosity = 0
+exclude = "(^|/)\\.github($|/)"

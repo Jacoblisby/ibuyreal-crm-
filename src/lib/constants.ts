@@ -1,12 +1,12 @@
-import type { Antagelser } from './types';
+import type { Assumptions } from './types';
 
 /**
- * Default antagelser. Disse værdier matcher Antagelser-tabellens defaults
+ * Default assumptions. Disse værdier matcher Assumptions-tabellens defaults
  * i schema.ts og spec'en (iBuyReal_CRM_SPEC.md).
  *
- * I produktion overskrives de af DB-rækken (id='default') i Antagelser-tabellen.
+ * I produktion overskrives de af DB-rækken (id='default') i Assumptions-tabellen.
  */
-export const DEFAULT_ANTAGELSER: Antagelser = {
+export const DEFAULT_ASSUMPTIONS: Assumptions = {
   adr: {
     'indre-by': 1609,
     vesterbro: 1195,

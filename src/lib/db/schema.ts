@@ -4,7 +4,7 @@
  * Domæner:
  *   A. Properties (cases i pipelinen)
  *   B. Investorer
- *   C. Antagelser (single-row config)
+ *   C. Assumptions (single-row config)
  */
 import {
   pgTable,
@@ -137,9 +137,9 @@ export const propertiesRelations = relations(properties, ({ one }) => ({
   }),
 }));
 
-// ─── C. Antagelser (single-row) ─────────────────────────────────────────────
+// ─── C. Assumptions (single-row) ─────────────────────────────────────────────
 
-export const antagelser = pgTable('antagelser', {
+export const assumptions = pgTable('assumptions', {
   id: text('id').primaryKey().default('default'),
 
   // Airbnb base rates per område
@@ -217,110 +217,34 @@ export const antagelser = pgTable('antagelser', {
 export const onMarketCandidates = pgTable(
   'on_market_candidates',
   {
-    id: uuid('id').primaryKey().defaultRandom(),
+    caseId: uuid('case_id').primaryKey(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),
 
-    // Identifikation
-    source: text('source').notNull().default('boligsiden'),
-    sourceId: text('source_id').notNull(), // slug fra Boligsiden, fx 'roersangervej-22-2400-koebenhavn-nv'
-    sourceUrl: text('source_url').notNull(),
-    caseUrl: text('case_url'), // mæglerens URL
-
-    // Adresse + bolig
-    address: text('address').notNull(),
-    postalCode: text('postal_code').notNull(),
-    city: text('city'),
-    bydel: text('bydel'), // udledt fra postnummer
-
-    kvm: integer('kvm'),
-    rooms: integer('rooms'),
-    yearBuilt: integer('year_built'),
-
-    // Pris
-    listPrice: doublePrecision('list_price'),
-    monthlyExpense: doublePrecision('monthly_expense'),
-    perAreaPrice: doublePrecision('per_area_price'),
-    latestValuation: doublePrecision('latest_valuation'), // Boligsiden's egen AVM
-
-    // Mægler
-    brokerKind: text('broker_kind'), // 'edc' | 'home' | 'nybolig' | ...
-    realtorName: text('realtor_name'),
-
-    // Tidsdata
-    daysOnMarket: integer('days_on_market'),
-    firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull().defaultNow(),
-    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
-    soldAt: timestamp('sold_at', { withTimezone: true }),
-
-    // Beregnet fordel ved scrape (alpha estimate hvis vi har latestValuation)
+    // Computed metrics
+    prediction: doublePrecision('prediction'),
     estimatedAlpha: doublePrecision('estimated_alpha'),
-
-    // Mæglerbeskrivelse + galleri (kan bruges på detail-siden)
-    descriptionTitle: text('description_title'),
-    description: text('description'),
-    images: jsonb('images').$type<string[]>(), // op til ~30 billed-URLs
-    perAreaPriceMedianBydel: doublePrecision('per_area_price_median_bydel'),
-
-    // V3-screening cache — kører calculateProperty() med:
-    //   FMV = latestValuation (eller iBuyReal AVM når wired)
-    //   ejTotal = monthlyExpense * 12
-    //   bydel/kvm/vaer/bygaar fra scrape
-    // Gemmes så listen kan sortere/filtere på iBuyReal-afkast.
-    v3Fmv: doublePrecision('v3_fmv'),
-    v3FmvSource: text('v3_fmv_source'), // 'boligsiden-bs-avm' | 'ibuyreal-avm' | 'manual'
-    v3Alpha: doublePrecision('v3_alpha'),
-    v3Investeret: doublePrecision('v3_investeret'),
-    v3OffMarketPris: doublePrecision('v3_off_market_pris'),
-    v3AfkastWorst: doublePrecision('v3_afkast_worst'),
-    v3AfkastBase: doublePrecision('v3_afkast_base'),
-    v3AfkastBest: doublePrecision('v3_afkast_best'),
-    v3ProfitBest: doublePrecision('v3_profit_best'),
-    v3CalculatedAt: timestamp('v3_calculated_at', { withTimezone: true }),
+    marketSpread: doublePrecision('market_spread'),
+    investedAmount: doublePrecision('invested_amount'),
+    offMarketPrice: doublePrecision('off_market_price'),
+    transactionCost: doublePrecision('transaction_cost'),
+    predictedAt: timestamp('predicted_at', { withTimezone: true }),
+    predictionSource: integer('prediction_source'),
 
     // Status
     status: text('status').notNull().default('active'), // active | sold | ignored
-    reviewStatus: text('review_status').notNull().default('ny'), // ny | interesseret | passet | importeret
-
-    // Hvis konverteret til Property
-    convertedPropertyId: uuid('converted_property_id').references(() => properties.id, {
-      onDelete: 'set null',
-    }),
-
-    // Billeder
-    primaryImage: text('primary_image'),
+    reviewType: text('review_type').notNull().default('new'), // new | interested | passed | imported
   },
   (t) => [
-    uniqueIndex('on_market_source_idx').on(t.source, t.sourceId),
     index('on_market_status_idx').on(t.status),
-    index('on_market_postal_idx').on(t.postalCode),
-    index('on_market_review_idx').on(t.reviewStatus),
+    index('on_market_review_idx').on(t.reviewType),
   ],
 );
-
-// ─── E. Scrape jobs (audit log) ─────────────────────────────────────────────
-
-export const scrapeJobs = pgTable('scrape_jobs', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
-  finishedAt: timestamp('finished_at', { withTimezone: true }),
-  runKind: text('run_kind').notNull().default('manual'), // 'cron' | 'manual'
-  postnrCodes: jsonb('postnr_codes').$type<string[]>().notNull(),
-  minRooms: integer('min_rooms'),
-  maxRooms: integer('max_rooms'),
-  status: text('status').notNull().default('running'), // running | success | failed
-  scraped: integer('scraped').notNull().default(0),
-  newListings: integer('new_listings').notNull().default(0),
-  updatedListings: integer('updated_listings').notNull().default(0),
-  markedSold: integer('marked_sold').notNull().default(0),
-  errorMsg: text('error_msg'),
-});
 
 export type Property = typeof properties.$inferSelect;
 export type NewProperty = typeof properties.$inferInsert;
 export type Investor = typeof investors.$inferSelect;
-export type AntagelserRow = typeof antagelser.$inferSelect;
+export type AssumptionsRow = typeof assumptions.$inferSelect;
 export type OnMarketCandidate = typeof onMarketCandidates.$inferSelect;
-export type ScrapeJob = typeof scrapeJobs.$inferSelect;

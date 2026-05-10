@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { calculateProperty } from '@/lib/calculator';
+import { rowToAssumptions } from '@/lib/assumptions';
 import { db } from '@/lib/db/client';
-import { properties, PROPERTY_STATUS } from '@/lib/db/schema';
+import { assumptions, properties, PROPERTY_STATUS } from '@/lib/db/schema';
 import type { Bydel } from '@/lib/types';
 
 const BYDELER = ['indre-by', 'vesterbro', 'noerrebro', 'oesterbro', 'frederiksberg', 'amager'] as const;
@@ -63,6 +64,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     (merged.ejGrundskyld ?? 0) +
     (merged.ejFaelles ?? 0) +
     (merged.ejOvrige ?? 0);
+  const [assumptionsRow] = await db.select().from(assumptions).where(eq(assumptions.id, 'default'));
+  const assumptionsConfig = rowToAssumptions(assumptionsRow);
 
   // Genberegn altid hvis nøgle-felter ændrer sig
   const calc = calculateProperty({
@@ -74,7 +77,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     fmv: merged.fmv ?? merged.udbud,
     ejTotal,
     tilbudPris: merged.tilbudPris ?? undefined,
-  });
+  }, assumptionsConfig);
 
   const update: Record<string, unknown> = {
     ...parsed.data,

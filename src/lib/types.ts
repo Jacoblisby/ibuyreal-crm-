@@ -22,7 +22,7 @@ export type PropertyStatus =
   | 'afvist'
   | 'solgt';
 
-export interface Antagelser {
+export interface Assumptions {
   // Airbnb base rates (kr/nat)
   adr: Record<Bydel, number>;
   // Belægning (%)

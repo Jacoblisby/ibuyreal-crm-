@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_ANTAGELSER } from './constants';
+import { DEFAULT_ASSUMPTIONS } from './constants';
 import {
   airbnbForCase,
   calcADR,
@@ -215,13 +215,13 @@ describe('maxTilbudspris (break-even worst)', () => {
   });
 });
 
-describe('default antagelser sanity', () => {
+describe('default assumptions sanity', () => {
   it('alle bydel-keys er defineret i adr/occ/langtidsleje', () => {
     const bydeler = ['indre-by', 'vesterbro', 'noerrebro', 'oesterbro', 'frederiksberg', 'amager'] as const;
     for (const b of bydeler) {
-      expect(DEFAULT_ANTAGELSER.adr[b]).toBeGreaterThan(0);
-      expect(DEFAULT_ANTAGELSER.occ[b]).toBeGreaterThan(0);
-      expect(DEFAULT_ANTAGELSER.langtidsleje[b]).toBeGreaterThan(0);
+      expect(DEFAULT_ASSUMPTIONS.adr[b]).toBeGreaterThan(0);
+      expect(DEFAULT_ASSUMPTIONS.occ[b]).toBeGreaterThan(0);
+      expect(DEFAULT_ASSUMPTIONS.langtidsleje[b]).toBeGreaterThan(0);
     }
   });
 });

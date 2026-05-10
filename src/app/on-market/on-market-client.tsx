@@ -2,24 +2,25 @@
 
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
-import type { OnMarketCandidate, ScrapeJob } from '@/lib/db/schema';
 import { formatKr, formatNum, formatPct } from '@/lib/format';
+import type { OnMarketListingRow } from '@/lib/on-market';
+import { bydelFromPostnr } from '@/lib/postnumre';
 import { BYDEL_LABEL } from '@/lib/status';
 
-type ReviewStatus = 'ny' | 'interesseret' | 'passet' | 'importeret';
+type ReviewStatus = 'new' | 'interested' | 'passed' | 'imported';
 
 const REVIEW_LABEL: Record<ReviewStatus, string> = {
-  ny: 'Ny',
-  interesseret: 'Interesseret',
-  passet: 'Passet',
-  importeret: 'Importeret',
+  new: 'New',
+  interested: 'Interested',
+  passed: 'Passed',
+  imported: 'Imported',
 };
 
 const REVIEW_COLOR: Record<ReviewStatus, string> = {
-  ny: 'bg-slate-100 text-slate-700',
-  interesseret: 'bg-emerald-100 text-emerald-700',
-  passet: 'bg-rose-100 text-rose-700',
-  importeret: 'bg-blue-100 text-blue-700',
+  new: 'bg-slate-100 text-slate-700',
+  interested: 'bg-emerald-100 text-emerald-700',
+  passed: 'bg-rose-100 text-rose-700',
+  imported: 'bg-blue-100 text-blue-700',
 };
 
 interface State {
@@ -46,83 +47,55 @@ const DEFAULT_STATE: State = {
 
 export function OnMarketClient({
   initial,
-  lastJob,
 }: {
-  initial: OnMarketCandidate[];
-  lastJob: ScrapeJob | null;
+  initial: OnMarketListingRow[];
 }) {
   const router = useRouter();
   const [rows] = useState(initial);
-  const [scraping, setScraping] = useState(false);
   const [s, setS] = useState<State>(DEFAULT_STATE);
+
+  function displayAddress(address: string | null): string {
+    if (!address) return 'Unknown address';
+    return address.replace(/\s*,?\s*\d{4}\s+.+$/u, '').trim();
+  }
 
   const filtered = useMemo(() => {
     let r = rows.filter((x) => x.status === 'active');
     if (s.q) {
       const q = s.q.toLowerCase();
-      r = r.filter((x) => x.address.toLowerCase().includes(q));
+      r = r.filter((x) => (x.address ?? '').toLowerCase().includes(q));
     }
-    if (s.bydel) r = r.filter((x) => x.bydel === s.bydel);
-    if (s.review) r = r.filter((x) => x.reviewStatus === s.review);
+    if (s.bydel) {
+      r = r.filter((x) => bydelFromPostnr(x.postalCode) === s.bydel);
+    }
+    if (s.review) r = r.filter((x) => x.reviewType === s.review);
     if (s.minKvm) r = r.filter((x) => (x.kvm ?? 0) >= Number(s.minKvm));
     if (s.maxKvm) r = r.filter((x) => (x.kvm ?? 0) <= Number(s.maxKvm));
     if (s.minPris) r = r.filter((x) => (x.listPrice ?? 0) >= Number(s.minPris));
     if (s.maxPris) r = r.filter((x) => (x.listPrice ?? 0) <= Number(s.maxPris));
-    if (s.onlyAlpha) r = r.filter((x) => (x.v3Alpha ?? 0) > 0);
+    if (s.onlyAlpha) r = r.filter((x) => (x.marketSpread ?? 0) > 0);
     return r;
   }, [rows, s]);
-
-  async function startScrape() {
-    if (!confirm('Scrape Boligsiden nu? Tager ~30-60 sekunder.')) return;
-    setScraping(true);
-    try {
-      const res = await fetch('/api/on-market/scrape', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: '{}',
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error ?? `Scrape fejlede: ${res.status}`);
-      }
-      const data = (await res.json()) as {
-        scraped: number;
-        newListings: number;
-        updated: number;
-        markedSold: number;
-        durationSeconds: number;
-      };
-      alert(
-        `Scrape færdig på ${data.durationSeconds.toFixed(1)}s\n` +
-          `${data.scraped} fundet · ${data.newListings} nye · ${data.updated} opdaterede · ${data.markedSold} solgte`,
-      );
-      router.refresh();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : 'Fejl');
-    } finally {
-      setScraping(false);
-    }
-  }
 
   async function setReview(id: string, review: ReviewStatus) {
     await fetch(`/api/on-market/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reviewStatus: review }),
+      body: JSON.stringify({ reviewType: review }),
     });
     router.refresh();
   }
 
   async function importCandidate(id: string) {
-    if (!confirm('Importér til pipelinen som ny screening-case?')) return;
+    if (!confirm('Import to pipeline as new screening case?')) return;
     const res = await fetch(`/api/on-market/${id}/import`, { method: 'POST' });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      alert(err.error ?? 'Import fejlede');
+      alert(err.error ?? 'Import failed');
       return;
     }
     const data = (await res.json()) as { propertyId: string };
-    if (confirm('Importeret. Åbn case nu?')) {
+    if (confirm('Imported. Open case now?')) {
       router.push(`/cases/${data.propertyId}`);
     } else {
       router.refresh();
@@ -131,36 +104,10 @@ export function OnMarketClient({
 
   return (
     <div className="space-y-4">
-      {/* Scrape control */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-4">
-        <div className="text-sm">
-          {lastJob ? (
-            <>
-              <span className="text-slate-500">Senest scrapet:</span>{' '}
-              <span className="font-medium text-slate-900">
-                {new Date(lastJob.startedAt).toLocaleString('da-DK')}
-              </span>{' '}
-              <span className="text-slate-500">
-                — {lastJob.scraped} fundet, {lastJob.newListings} nye, status: {lastJob.status}
-              </span>
-            </>
-          ) : (
-            <span className="text-slate-500">Ingen scrapes endnu — start nu for at hente data fra Boligsiden.</span>
-          )}
-        </div>
-        <button
-          onClick={startScrape}
-          disabled={scraping}
-          className="rounded-md bg-slate-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {scraping ? 'Scraper...' : 'Scrape Boligsiden nu'}
-        </button>
-      </div>
-
       {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white p-3 text-sm">
         <input
-          placeholder="Søg adresse..."
+          placeholder="Search address..."
           value={s.q}
           onChange={(e) => setS((p) => ({ ...p, q: e.target.value }))}
           className="rounded-md border border-slate-300 px-2 py-1.5"
@@ -170,7 +117,7 @@ export function OnMarketClient({
           onChange={(e) => setS((p) => ({ ...p, bydel: e.target.value }))}
           className="rounded-md border border-slate-300 px-2 py-1.5"
         >
-          <option value="">Alle bydele</option>
+          <option value="">All neighborhoods</option>
           {Object.entries(BYDEL_LABEL).map(([k, v]) => (
             <option key={k} value={k}>{v}</option>
           ))}
@@ -180,12 +127,12 @@ export function OnMarketClient({
           onChange={(e) => setS((p) => ({ ...p, review: e.target.value as State['review'] }))}
           className="rounded-md border border-slate-300 px-2 py-1.5"
         >
-          <option value="">Alle reviews</option>
+          <option value="">All reviews</option>
           {(Object.keys(REVIEW_LABEL) as ReviewStatus[]).map((r) => (
             <option key={r} value={r}>{REVIEW_LABEL[r]}</option>
           ))}
         </select>
-        <span className="text-slate-400">kvm:</span>
+        <span className="text-slate-400">sqm:</span>
         <input
           type="number"
           placeholder="min"
@@ -200,7 +147,7 @@ export function OnMarketClient({
           onChange={(e) => setS((p) => ({ ...p, maxKvm: e.target.value }))}
           className="w-20 rounded-md border border-slate-300 px-2 py-1.5"
         />
-        <span className="text-slate-400">pris (kr):</span>
+        <span className="text-slate-400">price (kr):</span>
         <input
           type="number"
           placeholder="min"
@@ -221,93 +168,79 @@ export function OnMarketClient({
             checked={s.onlyAlpha}
             onChange={(e) => setS((p) => ({ ...p, onlyAlpha: e.target.checked }))}
           />
-          Kun positiv α
+          Only positive spread
         </label>
-        <span className="ml-auto text-xs text-slate-500">{filtered.length} af {rows.length} aktive</span>
+        <span className="ml-auto text-xs text-slate-500">{filtered.length} of {rows.length} active</span>
         <button
           onClick={() => setS(DEFAULT_STATE)}
           className="text-xs text-slate-500 hover:text-slate-900"
         >
-          Nulstil
+          Reset
         </button>
       </div>
 
-      {/* Tabel */}
+      {/* Table */}
       <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
         <table className="w-full text-sm">
           <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
-              <th className="px-3 py-2">Adresse</th>
-              <th className="px-3 py-2">Bydel</th>
-              <th className="px-3 py-2 text-right">kvm</th>
-              <th className="px-3 py-2 text-right">vær</th>
-              <th className="px-3 py-2 text-right">Bygget</th>
-              <th className="px-3 py-2 text-right">Pris</th>
-              <th className="px-3 py-2 text-right">kr/m²</th>
-              <th className="px-3 py-2 text-right">Dage</th>
-              <th className="px-3 py-2 text-right">FMV</th>
-              <th className="px-3 py-2 text-right" title="Alpha = (FMV - investeret) / investeret. Positiv = underpriset.">α (V3)</th>
-              <th className="px-3 py-2 text-right" title="Best-case afkast = α + 14.8% beta + Airbnb cf-yield">Best</th>
-              <th className="px-3 py-2">Mægler</th>
+              <th className="px-3 py-2">Address</th>
+              <th className="px-3 py-2 text-right">sqm</th>
+              <th className="px-3 py-2 text-right">rooms</th>
+              <th className="px-3 py-2 text-right">Price</th>
+              <th className="px-3 py-2 text-right">Days</th>
+              <th className="px-3 py-2 text-right">Prediction</th>
+              <th className="px-3 py-2 text-right" title="Spread = (prediction - invested) / invested. Positive = underpriced.">Spread</th>
+              <th className="px-3 py-2 text-right" title="Best-case return = spread + configured best beta">Best Ret.</th>
               <th className="px-3 py-2">Review</th>
-              <th className="px-3 py-2">Handling</th>
+              <th className="px-3 py-2">Action</th>
             </tr>
           </thead>
           <tbody>
             {filtered.map((r) => {
-              const review = r.reviewStatus as ReviewStatus;
-              const importedAlready = !!r.convertedPropertyId;
+              const review = r.reviewType as ReviewStatus;
+              const importedAlready = false;
               return (
                 <tr key={r.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50">
                   <td className="px-3 py-2 font-medium text-slate-900">
                     <a href={`/on-market/${r.id}`} className="hover:text-blue-600">
-                      {r.address}
+                      {displayAddress(r.address)}
                     </a>
                     <div className="text-xs text-slate-400">{r.postalCode} {r.city}</div>
                   </td>
-                  <td className="px-3 py-2 text-slate-600">
-                    {r.bydel ? BYDEL_LABEL[r.bydel] ?? r.bydel : '–'}
-                  </td>
                   <td className="px-3 py-2 text-right tabular-nums">{formatNum(r.kvm)}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{r.rooms ?? '–'}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-xs text-slate-500">
-                    {r.yearBuilt ?? '–'}
-                  </td>
                   <td className="px-3 py-2 text-right tabular-nums">{formatKr(r.listPrice)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-xs text-slate-500">
-                    {formatKr(r.perAreaPrice)}
-                  </td>
                   <td className="px-3 py-2 text-right tabular-nums text-xs text-slate-500">
                     {r.daysOnMarket ?? '–'}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums text-xs">
-                    {r.v3Fmv ? formatKr(r.v3Fmv) : '–'}
+                    {r.prediction ? formatKr(r.prediction) : '–'}
                   </td>
                   <td
                     className={
                       'px-3 py-2 text-right tabular-nums font-medium ' +
-                      (r.v3Alpha === null
+                      (r.marketSpread === null
                         ? 'text-slate-400'
-                        : r.v3Alpha > 0
+                        : r.marketSpread > 0
                         ? 'text-emerald-700'
                         : 'text-rose-600')
                     }
                   >
-                    {r.v3Alpha === null ? '–' : formatPct(r.v3Alpha)}
+                    {r.marketSpread === null ? '–' : formatPct(r.marketSpread)}
                   </td>
                   <td
                     className={
                       'px-3 py-2 text-right tabular-nums font-medium ' +
-                      (r.v3AfkastBest === null
+                      (r.returnBestCase === null
                         ? 'text-slate-400'
-                        : r.v3AfkastBest > 0
+                        : r.returnBestCase > 0
                         ? 'text-emerald-700'
                         : 'text-rose-600')
                     }
                   >
-                    {r.v3AfkastBest === null ? '–' : formatPct(r.v3AfkastBest)}
+                    {r.returnBestCase === null ? '–' : formatPct(r.returnBestCase)}
                   </td>
-                  <td className="px-3 py-2 text-xs text-slate-600">{r.brokerKind}</td>
                   <td className="px-3 py-2">
                     <select
                       value={review}
@@ -323,31 +256,22 @@ export function OnMarketClient({
                     </select>
                   </td>
                   <td className="px-3 py-2">
-                    {importedAlready ? (
-                      <a
-                        href={`/cases/${r.convertedPropertyId}`}
-                        className="text-xs text-blue-600 hover:underline"
-                      >
-                        Se case →
-                      </a>
-                    ) : (
-                      <button
-                        onClick={() => importCandidate(r.id)}
-                        className="rounded-md bg-slate-900 px-2 py-1 text-xs font-medium text-white hover:bg-slate-800"
-                      >
-                        Importér
-                      </button>
-                    )}
+                    <button
+                      onClick={() => importCandidate(r.id)}
+                      className="rounded-md bg-slate-900 px-2 py-1 text-xs font-medium text-white hover:bg-slate-800"
+                    >
+                      Import
+                    </button>
                   </td>
                 </tr>
               );
             })}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={14} className="px-3 py-12 text-center text-sm text-slate-400">
+                <td colSpan={10} className="px-3 py-12 text-center text-sm text-slate-400">
                   {rows.length === 0
-                    ? 'Ingen scrape data endnu — klik "Scrape Boligsiden nu".'
-                    : 'Ingen kandidater matcher filtrene.'}
+                    ? 'No on-market candidates available.'
+                    : 'No candidates match your filters.'}
                 </td>
               </tr>
             )}

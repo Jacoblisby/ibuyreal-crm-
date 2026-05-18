@@ -227,23 +227,32 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
     <div className="space-y-4">
       {/* AVM-status banner */}
       {c.v3FmvSource === 'ibuyreal-avm' ? (
-        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs text-emerald-800">
-          <strong>FMV fra iBuyReal AVM</strong> ·{' '}
-          {c.avmPricePerSqm
-            ? `${Math.round(c.avmPricePerSqm).toLocaleString('da-DK')} kr/m² × ${c.kvm} m² = ${formatKr(c.v3Fmv)}`
-            : ''}
-          {c.avmCalculatedAt && (
-            <>
-              {' '}
-              · beregnet {new Date(c.avmCalculatedAt).toLocaleDateString('da-DK')}
-            </>
-          )}
+        <div className="flex items-center gap-3 rounded-lg border border-emerald-200/70 bg-gradient-to-r from-emerald-50 to-white px-4 py-2.5 text-xs text-emerald-900 shadow-sm">
+          <svg className="h-4 w-4 shrink-0 text-emerald-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+          <div>
+            <span className="font-semibold">FMV fra iBuyReal AVM</span>
+            {c.avmPricePerSqm && (
+              <span className="ml-1.5 text-emerald-800/80">
+                · {Math.round(c.avmPricePerSqm).toLocaleString('da-DK')} kr/m² × {c.kvm} m² = {formatKr(c.v3Fmv)}
+              </span>
+            )}
+          </div>
         </div>
       ) : (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">
-          <strong>FMV = listPris (fallback)</strong> — iBuyReal AVM kender ikke denne adresse
-          ({c.addressId ? `address_id ${c.addressId.slice(0, 8)}…` : 'ingen DAWA address_id'}).
-          Justér FMV manuelt herover hvis du har et andet skøn.
+        <div className="flex items-center gap-3 rounded-lg border border-amber-200/70 bg-gradient-to-r from-amber-50 to-white px-4 py-2.5 text-xs text-amber-900 shadow-sm">
+          <svg className="h-4 w-4 shrink-0 text-amber-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+          <div>
+            <span className="font-semibold">FMV = listPris (fallback)</span>
+            <span className="ml-1.5 text-amber-800/80">
+              · iBuyReal AVM kender ikke denne adresse. Justér FMV manuelt herover hvis du har et bedre skøn.
+            </span>
+          </div>
         </div>
       )}
 
@@ -266,8 +275,10 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
                       key={url + i}
                       onClick={() => setActiveImg(i)}
                       className={
-                        'aspect-square overflow-hidden rounded ring-2 transition ' +
-                        (activeImg === i ? 'ring-blue-500' : 'ring-transparent hover:ring-slate-300')
+                        'aspect-square overflow-hidden rounded ring-2 transition-[box-shadow,transform,opacity] duration-150 ease-[var(--ease-out)] active:scale-[0.95] ' +
+                        (activeImg === i
+                          ? 'ring-slate-900 opacity-100'
+                          : 'ring-transparent opacity-70 hover:opacity-100 hover:ring-slate-300')
                       }
                     >
                       <img src={url} alt="" className="h-full w-full object-cover" />
@@ -289,7 +300,7 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
               {importedAlready ? (
                 <a
                   href={`/cases/${c.convertedPropertyId}`}
-                  className="block w-full rounded-md bg-blue-600 px-3 py-2 text-center text-sm font-medium text-white hover:bg-blue-700"
+                  className="block w-full rounded-md bg-blue-600 px-3 py-2 text-center text-sm font-medium text-white shadow-sm transition-[transform,background-color,box-shadow] duration-150 ease-[var(--ease-out)] hover:bg-blue-700 hover:shadow-md active:scale-[0.98]"
                 >
                   Åbn case i pipeline →
                 </a>
@@ -297,8 +308,14 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
                 <button
                   onClick={importToPipeline}
                   disabled={busy}
-                  className="w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white shadow-sm transition-[transform,background-color,box-shadow] duration-150 ease-[var(--ease-out)] hover:bg-slate-800 hover:shadow-md active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100"
                 >
+                  {busy && (
+                    <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeOpacity="0.25" strokeWidth="3" />
+                      <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                    </svg>
+                  )}
                   Importér til pipeline
                 </button>
               )}
@@ -306,7 +323,7 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
                 href={c.sourceUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-center text-sm font-medium text-slate-700 hover:bg-slate-50"
+                className="block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-center text-sm font-medium text-slate-700 transition-[transform,background-color,border-color] duration-150 ease-[var(--ease-out)] hover:border-slate-300 hover:bg-slate-50 active:scale-[0.98]"
               >
                 Boligsiden ↗
               </a>
@@ -315,7 +332,7 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
                   href={c.caseUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-center text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  className="block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-center text-sm font-medium text-slate-700 transition-[transform,background-color,border-color] duration-150 ease-[var(--ease-out)] hover:border-slate-300 hover:bg-slate-50 active:scale-[0.98]"
                 >
                   Mægler ↗
                 </a>
@@ -323,21 +340,30 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
             </div>
           </Panel>
           <Panel title="Review">
-            <div className="space-y-1">
-              {(Object.keys(REVIEW_LABEL) as Review[]).map((r) => (
-                <button
-                  key={r}
-                  onClick={() => setReview(r)}
-                  disabled={busy || review === r || importedAlready}
-                  className={
-                    'flex w-full items-center justify-between rounded-md px-3 py-1.5 text-sm transition ' +
-                    (review === r ? REVIEW_COLOR[r] + ' font-medium' : 'hover:bg-slate-50 text-slate-700')
-                  }
-                >
-                  <span>{REVIEW_LABEL[r]}</span>
-                  {review === r && <span>✓</span>}
-                </button>
-              ))}
+            <div className="space-y-0.5">
+              {(Object.keys(REVIEW_LABEL) as Review[]).map((r) => {
+                const active = review === r;
+                return (
+                  <button
+                    key={r}
+                    onClick={() => setReview(r)}
+                    disabled={busy || active || importedAlready}
+                    className={
+                      'flex w-full items-center justify-between rounded-md px-3 py-1.5 text-sm transition-[background-color,color,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.98] disabled:active:scale-100 ' +
+                      (active
+                        ? REVIEW_COLOR[r] + ' font-medium'
+                        : 'text-slate-700 hover:bg-slate-100')
+                    }
+                  >
+                    <span>{REVIEW_LABEL[r]}</span>
+                    {active && (
+                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </Panel>
         </div>
@@ -359,12 +385,12 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
       </div>
 
       {/* Antagelser (editable) */}
-      <div className="rounded-lg border border-slate-200 bg-white p-5">
+      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-slate-900">Antagelser (live recalc)</h3>
+          <h3 className="text-[13px] font-semibold tracking-tight text-slate-900">Antagelser (live recalc)</h3>
           <button
             onClick={() => setForm(initialInputs)}
-            className="text-xs text-slate-500 hover:text-slate-900"
+            className="rounded-md px-2 py-1 text-xs text-slate-500 transition-colors duration-150 ease-[var(--ease-out)] hover:bg-slate-100 hover:text-slate-900 active:scale-[0.97]"
           >
             Nulstil
           </button>
@@ -765,17 +791,25 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
         :global(.form-input) {
           width: 100%;
           padding: 0.4rem 0.6rem;
-          background: white;
-          border: 1px solid #cbd5e1;
+          background: #f8fafc;
+          border: 1px solid #e2e8f0;
           border-radius: 0.375rem;
           font-size: 0.875rem;
           color: #0f172a;
           outline: none;
-          transition: border-color 0.15s;
+          font-variant-numeric: tabular-nums;
+          transition: border-color 0.15s cubic-bezier(0.23, 1, 0.32, 1),
+                      background-color 0.15s cubic-bezier(0.23, 1, 0.32, 1),
+                      box-shadow 0.15s cubic-bezier(0.23, 1, 0.32, 1);
+        }
+        :global(.form-input:hover) {
+          background: white;
+          border-color: #cbd5e1;
         }
         :global(.form-input:focus) {
-          border-color: #2563eb;
-          box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+          background: white;
+          border-color: #0f172a;
+          box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.08);
         }
       `}</style>
     </div>
@@ -823,25 +857,25 @@ function Kpi({
   sub?: string;
 }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4">
-      <div className="text-xs text-slate-500">{label}</div>
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-shadow duration-200 ease-[var(--ease-out)] hover:shadow-md">
+      <div className="text-[11px] font-medium uppercase tracking-wider text-slate-500">{label}</div>
       <div
         className={
-          'mt-1 text-lg font-semibold ' +
+          'mt-1.5 text-xl font-semibold tabular-nums tracking-tight ' +
           (accent === 'emerald' ? 'text-emerald-600' : accent === 'rose' ? 'text-rose-600' : 'text-slate-900')
         }
       >
         {value}
       </div>
-      {sub && <div className="mt-0.5 text-xs text-slate-400">{sub}</div>}
+      {sub && <div className="mt-1 text-xs text-slate-400">{sub}</div>}
     </div>
   );
 }
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-5">
-      <h3 className="mb-3 text-sm font-semibold text-slate-900">{title}</h3>
+    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h3 className="mb-3 text-[13px] font-semibold tracking-tight text-slate-900">{title}</h3>
       {children}
     </div>
   );

@@ -264,8 +264,15 @@ export const onMarketCandidates = pgTable(
     images: jsonb('images').$type<string[]>(), // op til ~30 billed-URLs
     perAreaPriceMedianBydel: doublePrecision('per_area_price_median_bydel'),
 
+    // DAWA address UUID — kobler til iBuyReal AVM input
+    addressId: text('address_id'),
+    // AVM-output cache (kun udfyldt hvis modellen kender adressen)
+    avmUnitUuid: text('avm_unit_uuid'),
+    avmPricePerSqm: doublePrecision('avm_price_per_sqm'),
+    avmCalculatedAt: timestamp('avm_calculated_at', { withTimezone: true }),
+
     // V3-screening cache — kører calculateProperty() med:
-    //   FMV = latestValuation (eller iBuyReal AVM når wired)
+    //   FMV = iBuyReal AVM (predicted_price_per_sqm × kvm) eller listPrice som fallback
     //   ejTotal = monthlyExpense * 12
     //   bydel/kvm/vaer/bygaar fra scrape
     // Gemmes så listen kan sortere/filtere på iBuyReal-afkast.

@@ -4,12 +4,11 @@
  * Flow:
  *  1. Insert ny scrape_jobs row (status=running)
  *  2. Hent alle 2-3 vær. ejerlejligheder fra Boligsiden for KBH+Frb
- *  3. UPSERT til on_market_candidates (lastSeenAt = now())
- *  4. Mark-sold: rows der var active men ikke set i denne run
- *  5. Update job-row med counts + status=success/failed
- *
- * Beregner også estimatedAlpha = (latestValuation - listPrice) / listPrice
- * (Boligsidens egen AVM som proxy — vores rigtige AVM kører i et separat job).
+ *  3. Batch-fetch FMV fra iBuyReal AVM (én call per ~150 addresses)
+ *  4. UPSERT til on_market_candidates (lastSeenAt = now())
+ *     V3-screening køres inline med AVM-FMV (eller listPris fallback)
+ *  5. Mark-sold: rows der var active men ikke set i denne run
+ *  6. Update job-row med counts + status=success/failed
  */
 import { and, eq, notInArray } from 'drizzle-orm';
 import { calculateProperty } from './calculator';
@@ -17,11 +16,13 @@ import { db } from './db/client';
 import { onMarketCandidates, scrapeJobs } from './db/schema';
 import { bydelFromPostnr, DEFAULT_SCRAPE_POSTNUMRE } from './postnumre';
 import { searchCondos, type ScrapedListing } from './services/boligsiden';
+import { estimateFmv, fetchAvmBatch, type AvmPrediction } from './avm';
 import type { Bydel } from './types';
 
 export interface ScrapeRunResult {
   jobId: string;
   scraped: number;
+  avmPredicted: number; // hvor mange fik AVM-FMV (ikke fallback)
   newListings: number;
   updated: number;
   markedSold: number;
@@ -35,38 +36,33 @@ export interface ScrapeRunOptions {
   runKind?: 'cron' | 'manual';
 }
 
-import { estimateFmv } from './avm';
-
-function estimateAlpha(listing: ScrapedListing): number | null {
+function estimateBsAlpha(listing: ScrapedListing): number | null {
+  // Boligsidens egen AVM-spread — kun reference, ikke iBuyReal alpha
   if (!listing.latestValuation || listing.listPrice <= 0) return null;
   return (listing.latestValuation - listing.listPrice) / listing.listPrice;
 }
 
 /**
- * Kør V3-screening på en kandidat: estimerer FMV via avm-bridge,
- * beregner full calculator-output (alpha, scenarier, profit) og returnerer
- * felter klar til at gemme på onMarketCandidates.
+ * Kør V3-screening på en kandidat med given FMV.
+ * On-market: tilbudPris = listPris (ingen off-market rabat).
  */
-function runV3OnListing(listing: ScrapedListing, bydel: Bydel | null) {
+function runV3OnListing(
+  listing: ScrapedListing,
+  bydel: Bydel | null,
+  avmPrediction: AvmPrediction | undefined,
+) {
+  if (!bydel) return null; // V3 kræver bydel for langtidsleje-rate
+
   const fmvEstimate = estimateFmv({
     listPrice: listing.listPrice,
-    latestValuation: listing.latestValuation,
-    bydel,
     kvm: listing.kvm,
-    rooms: listing.rooms,
-    yearBuilt: listing.yearBuilt,
-    postalCode: listing.postalCode,
+    avmPricePerSqm: avmPrediction?.pricePerSqm ?? null,
   });
 
-  if (!bydel) return null; // V3 har brug for bydel for langtidsleje-rate
-
-  // Hvis monthlyExpense ikke er sat, antag 350 kr/m²/år som groft estimat
   const ejTotal = listing.monthlyExpense
     ? listing.monthlyExpense * 12
     : Math.round(listing.kvm * 350);
 
-  // On-market: ingen off-market arbitrage. Tilbudspris = listPris (default
-  // udgangspunkt; brugeren kan justere på detail-siden via tilbudPris-input).
   const calc = calculateProperty({
     bydel,
     kvm: listing.kvm,
@@ -75,10 +71,13 @@ function runV3OnListing(listing: ScrapedListing, bydel: Bydel | null) {
     udbud: listing.listPrice,
     fmv: fmvEstimate.fmv,
     ejTotal,
-    tilbudPris: listing.listPrice, // ← skip off-market rabat for on-market
+    tilbudPris: listing.listPrice, // on-market: ingen rabat
   });
 
   return {
+    avmUnitUuid: avmPrediction?.unitUuid ?? null,
+    avmPricePerSqm: avmPrediction?.pricePerSqm ?? null,
+    avmCalculatedAt: new Date(),
     v3Fmv: fmvEstimate.fmv,
     v3FmvSource: fmvEstimate.source,
     v3Alpha: calc.alpha,
@@ -114,22 +113,40 @@ export async function runScrapeJob(opts: ScrapeRunOptions = {}): Promise<ScrapeR
     .returning({ id: scrapeJobs.id });
 
   let scraped = 0;
+  let avmPredicted = 0;
   let newListings = 0;
   let updated = 0;
   let markedSold = 0;
 
   try {
     // 2. Hent fra Boligsiden
+    console.log('[scrape] Henter listings fra Boligsiden...');
     const listings = await searchCondos({ zipCodes: postnumre, minRooms, maxRooms });
     scraped = listings.length;
     const seenSlugs: string[] = listings.map((l) => l.slug);
+    console.log(`[scrape] ${scraped} listings hentet`);
 
-    // 3. UPSERT
+    // 3. Batch-fetch AVM predictions
+    const addressIds = listings
+      .map((l) => l.addressId)
+      .filter((x): x is string => !!x);
+    console.log(`[scrape] Kalder AVM for ${addressIds.length} addresses...`);
+    const avmStart = Date.now();
+    const avmMap = await fetchAvmBatch(addressIds);
+    avmPredicted = avmMap.size;
+    console.log(
+      `[scrape] AVM ${avmPredicted}/${addressIds.length} predicted på ${(
+        (Date.now() - avmStart) /
+        1000
+      ).toFixed(1)}s`,
+    );
+
+    // 4. UPSERT
     for (const l of listings) {
       const bydel = bydelFromPostnr(l.postalCode);
-      const estimatedAlpha = estimateAlpha(l);
+      const estimatedAlpha = estimateBsAlpha(l);
+      const avmPrediction = l.addressId ? avmMap.get(l.addressId) : undefined;
 
-      // Tjek om vi har set den før
       const existing = await db
         .select({ id: onMarketCandidates.id, status: onMarketCandidates.status })
         .from(onMarketCandidates)
@@ -140,13 +157,14 @@ export async function runScrapeJob(opts: ScrapeRunOptions = {}): Promise<ScrapeR
           ),
         );
 
-      const v3 = runV3OnListing(l, bydel);
+      const v3 = runV3OnListing(l, bydel, avmPrediction);
 
       const values = {
         source: 'boligsiden',
         sourceId: l.slug,
         sourceUrl: l.url,
         caseUrl: l.caseUrl,
+        addressId: l.addressId,
         address: l.address,
         postalCode: l.postalCode,
         city: l.city,
@@ -180,7 +198,6 @@ export async function runScrapeJob(opts: ScrapeRunOptions = {}): Promise<ScrapeR
           .set({
             ...values,
             updatedAt: new Date(),
-            // Re-aktiver hvis tidligere sold (kom tilbage på markedet)
             soldAt: existing[0].status === 'sold' ? null : undefined,
           })
           .where(eq(onMarketCandidates.id, existing[0].id));
@@ -188,7 +205,7 @@ export async function runScrapeJob(opts: ScrapeRunOptions = {}): Promise<ScrapeR
       }
     }
 
-    // 4. Mark-sold: alle aktive rows der ikke blev set i dette run
+    // 5. Mark-sold
     if (seenSlugs.length > 0) {
       const result = await db
         .update(onMarketCandidates)
@@ -203,7 +220,7 @@ export async function runScrapeJob(opts: ScrapeRunOptions = {}): Promise<ScrapeR
       markedSold = result.length;
     }
 
-    // 5. Job done
+    // 6. Job done
     await db
       .update(scrapeJobs)
       .set({
@@ -234,6 +251,7 @@ export async function runScrapeJob(opts: ScrapeRunOptions = {}): Promise<ScrapeR
   return {
     jobId: job.id,
     scraped,
+    avmPredicted,
     newListings,
     updated,
     markedSold,

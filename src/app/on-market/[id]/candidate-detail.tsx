@@ -213,11 +213,26 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
   return (
     <div className="space-y-4">
       {/* AVM-status banner */}
-      <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">
-        <strong>FMV = listPris</strong> (iBuyReal AVM ikke wired endnu) — alpha bliver ~−0,6%
-        (kun tx-omkostning) indtil AVM giver os reel FMV. Profit i scenarierne kommer fra
-        beta + cf-yield. Justér FMV manuelt herover for at simulere AVM-output.
-      </div>
+      {c.v3FmvSource === 'ibuyreal-avm' ? (
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs text-emerald-800">
+          <strong>FMV fra iBuyReal AVM</strong> ·{' '}
+          {c.avmPricePerSqm
+            ? `${Math.round(c.avmPricePerSqm).toLocaleString('da-DK')} kr/m² × ${c.kvm} m² = ${formatKr(c.v3Fmv)}`
+            : ''}
+          {c.avmCalculatedAt && (
+            <>
+              {' '}
+              · beregnet {new Date(c.avmCalculatedAt).toLocaleDateString('da-DK')}
+            </>
+          )}
+        </div>
+      ) : (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">
+          <strong>FMV = listPris (fallback)</strong> — iBuyReal AVM kender ikke denne adresse
+          ({c.addressId ? `address_id ${c.addressId.slice(0, 8)}…` : 'ingen DAWA address_id'}).
+          Justér FMV manuelt herover hvis du har et andet skøn.
+        </div>
+      )}
 
       {/* Image gallery + actions side-by-side */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
@@ -515,7 +530,11 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
               accent={live.calc.alpha > 0 ? 'emerald' : 'rose'}
               sub="(FMV − investeret) / investeret"
             />
-            <Kpi label="FMV" value={formatKr(live.fmv)} sub="= listPris (placeholder)" />
+            <Kpi
+              label="FMV"
+              value={formatKr(live.fmv)}
+              sub={c.v3FmvSource === 'ibuyreal-avm' ? 'iBuyReal AVM' : 'listPris fallback'}
+            />
             <Kpi label="Investeret" value={formatKr(live.calc.investeret)} sub="tilbudspris + tx" />
             <Kpi
               label="Max bud (BE worst)"

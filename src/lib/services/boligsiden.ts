@@ -38,6 +38,7 @@ interface BoligsidenCase {
   realtor?: { name?: string };
   slugAddress?: string;
   address?: {
+    addressID?: string; // DAWA UUID — bruges som input til iBuyReal AVM
     cityName?: string;
     door?: string;
     floor?: string;
@@ -60,6 +61,7 @@ export interface ScrapedListing {
   slug: string;
   url: string;
   caseUrl: string | null;
+  addressId: string | null; // DAWA UUID — bruges som input til AVM
   address: string;
   postalCode: string;
   city: string;
@@ -161,6 +163,7 @@ function parseCase(c: BoligsidenCase): ScrapedListing | null {
     slug,
     url: `https://www.boligsiden.dk/adresse/${slug}`,
     caseUrl: c.caseUrl ?? null,
+    addressId: addr.addressID ?? null,
     address,
     postalCode: String(addr.zipCode ?? ''),
     city: addr.cityName ?? '',

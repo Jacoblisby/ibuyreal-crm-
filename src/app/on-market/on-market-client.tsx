@@ -173,9 +173,15 @@ export function OnMarketClient({
         <button
           onClick={startScrape}
           disabled={scraping}
-          className="rounded-md bg-slate-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+          className="group inline-flex items-center gap-2 rounded-md bg-slate-900 px-4 py-1.5 text-sm font-medium text-white shadow-sm transition-[transform,background-color,box-shadow] duration-150 ease-[var(--ease-out)] hover:bg-slate-800 hover:shadow-md active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:shadow-sm disabled:active:scale-100"
         >
-          {scraping ? 'Scraper...' : 'Scrape Boligsiden nu'}
+          {scraping && (
+            <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeOpacity="0.25" strokeWidth="3" />
+              <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+            </svg>
+          )}
+          {scraping ? 'Scraper Boligsiden…' : 'Scrape Boligsiden nu'}
         </button>
       </div>
 
@@ -248,7 +254,7 @@ export function OnMarketClient({
         <span className="ml-auto text-xs text-slate-500">{filtered.length} af {rows.length} aktive</span>
         <button
           onClick={() => setS(DEFAULT_STATE)}
-          className="text-xs text-slate-500 hover:text-slate-900"
+          className="rounded px-2 py-1 text-xs text-slate-500 transition-colors duration-150 ease-[var(--ease-out)] hover:bg-slate-100 hover:text-slate-900 active:scale-[0.97]"
         >
           Nulstil
         </button>
@@ -336,8 +342,15 @@ export function OnMarketClient({
                       onChange={(e) => setReview(r.id, e.target.value as ReviewStatus, r.address)}
                       disabled={importedAlready}
                       className={
-                        'rounded-md border-0 px-2 py-1 text-xs font-medium ' + REVIEW_COLOR[review]
+                        'cursor-pointer appearance-none rounded-full border-0 bg-no-repeat py-1 pl-2.5 pr-7 text-xs font-medium transition-[background-color,transform] duration-150 ease-[var(--ease-out)] hover:brightness-95 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-60 ' +
+                        REVIEW_COLOR[review]
                       }
+                      style={{
+                        backgroundImage:
+                          "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>\")",
+                        backgroundPosition: 'right 0.5rem center',
+                        backgroundSize: '10px 10px',
+                      }}
                     >
                       {(Object.keys(REVIEW_LABEL) as ReviewStatus[]).map((rv) => (
                         <option key={rv} value={rv}>{REVIEW_LABEL[rv]}</option>
@@ -348,14 +361,15 @@ export function OnMarketClient({
                     {importedAlready ? (
                       <a
                         href={`/cases/${r.convertedPropertyId}`}
-                        className="text-xs text-blue-600 hover:underline"
+                        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-blue-700 transition-colors duration-150 ease-[var(--ease-out)] hover:bg-blue-50 active:scale-[0.97]"
                       >
-                        Se case →
+                        Se case
+                        <span aria-hidden="true">→</span>
                       </a>
                     ) : (
                       <button
                         onClick={() => importCandidate(r.id, r.address)}
-                        className="rounded-md bg-slate-900 px-2 py-1 text-xs font-medium text-white hover:bg-slate-800"
+                        className="rounded-md bg-slate-900 px-2.5 py-1 text-xs font-medium text-white shadow-sm transition-[transform,background-color,box-shadow] duration-150 ease-[var(--ease-out)] hover:bg-slate-800 hover:shadow-md active:scale-[0.94]"
                       >
                         Importér
                       </button>

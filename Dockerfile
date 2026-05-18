@@ -1,12 +1,12 @@
 # iBuyReal CRM — production image.
 # Multi-stage build til en lille, robust Coolify-deploy.
 
-FROM node:20-alpine AS deps
+FROM node:20-slim AS deps
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci --omit=dev
 
-FROM node:20-alpine AS builder
+FROM node:20-slim AS builder
 WORKDIR /app
 COPY package.json package-lock.json* ./
 # --include=dev tvinger devDeps (Tailwind, drizzle-kit, etc.) selv hvis
@@ -22,14 +22,14 @@ ENV NODE_ENV=development
 RUN npm run build
 ENV NODE_ENV=production
 
-FROM node:20-alpine AS runner
+FROM node:20-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
-# Non-root user
-RUN addgroup -g 1001 nodejs && adduser -u 1001 -G nodejs -s /bin/sh -D nextjs
+# Non-root user (Debian-slim syntax)
+RUN groupadd -g 1001 nodejs && useradd -u 1001 -g nodejs -s /bin/sh -m nextjs
 
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./

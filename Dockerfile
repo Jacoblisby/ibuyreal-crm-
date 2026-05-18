@@ -9,13 +9,18 @@ RUN npm ci --omit=dev
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY package.json package-lock.json* ./
-RUN npm ci
+# --include=dev tvinger devDeps (Tailwind, drizzle-kit, etc.) selv hvis
+# NODE_ENV=production er sat som build-arg (Coolify injecter sådanne).
+RUN npm ci --include=dev
 COPY . .
 ARG DATABASE_URL=""
 ARG NEXT_PUBLIC_APP_URL=""
 ENV DATABASE_URL=$DATABASE_URL
 ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
+# Build kører som dev så Tailwind PostCSS-plugin er tilgængelig
+ENV NODE_ENV=development
 RUN npm run build
+ENV NODE_ENV=production
 
 FROM node:20-alpine AS runner
 WORKDIR /app

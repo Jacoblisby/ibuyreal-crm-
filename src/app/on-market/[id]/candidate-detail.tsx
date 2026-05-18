@@ -721,6 +721,58 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
                 </div>
               </Panel>
 
+              <Panel title="📊 FMV-sammenligning (Boligsiden vs iBuyReal)">
+                <div className="space-y-1.5 text-sm">
+                  <Row label="Udbudspris" value={formatKr(live.udbud)} />
+                  <Row
+                    label="iBuyReal AVM"
+                    value={c.v3FmvSource === 'ibuyreal-avm' ? formatKr(c.v3Fmv) : '— (mangler)'}
+                    bold
+                  />
+                  {c.v3FmvSource === 'ibuyreal-avm' && (
+                    <Row
+                      label="iBuyReal kr/m²"
+                      value={c.avmPricePerSqm ? formatKr(c.avmPricePerSqm) : '–'}
+                      muted
+                    />
+                  )}
+                  <Divider />
+                  <Row
+                    label="Boligsidens AVM"
+                    value={c.latestValuation ? formatKr(c.latestValuation) : '— (ingen data)'}
+                  />
+                  {c.latestValuation && live.kvm > 0 && (
+                    <>
+                      <Row
+                        label="Boligsiden kr/m²"
+                        value={formatKr(c.latestValuation / live.kvm)}
+                        muted
+                      />
+                      <Row
+                        label="Spread vs udbud"
+                        value={`${(((c.latestValuation - live.udbud) / live.udbud) * 100).toFixed(1)}%`}
+                        muted
+                      />
+                    </>
+                  )}
+                  {c.v3FmvSource === 'ibuyreal-avm' && c.latestValuation && c.v3Fmv && (
+                    <>
+                      <Divider />
+                      <Row
+                        label="iBR vs BS spread"
+                        value={`${(((c.v3Fmv - c.latestValuation) / c.latestValuation) * 100).toFixed(1)}%`}
+                        bold
+                      />
+                    </>
+                  )}
+                </div>
+                <p className="mt-3 border-t border-slate-100 pt-2 text-xs text-slate-500">
+                  Boligsidens AVM vises kun til reference og indgår <strong>ikke</strong> i
+                  beregningerne ovenfor. Alle scenarier bruger iBuyReal AVM (eller listPris
+                  som fallback hvis AVM mangler).
+                </p>
+              </Panel>
+
               <Panel title="Mægler">
                 <div className="space-y-1.5 text-sm">
                   <Row label="kr/m² (udbud)" value={c.perAreaPrice ? formatKr(c.perAreaPrice) : '–'} />

@@ -154,18 +154,31 @@ export function OnMarketClient({
   return (
     <div className="space-y-4">
       {/* Scrape control */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="text-sm">
           {lastJob ? (
-            <>
-              <span className="text-slate-500">Senest scrapet:</span>{' '}
-              <span className="font-medium text-slate-900">
-                {new Date(lastJob.startedAt).toLocaleString('da-DK')}
-              </span>{' '}
-              <span className="text-slate-500">
-                — {lastJob.scraped} fundet, {lastJob.newListings} nye, status: {lastJob.status}
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <span className="flex items-center gap-2 text-slate-500">
+                <span
+                  className={
+                    'inline-block h-1.5 w-1.5 rounded-full ' +
+                    (lastJob.status === 'success'
+                      ? 'bg-emerald-500'
+                      : lastJob.status === 'failed'
+                      ? 'bg-rose-500'
+                      : 'bg-amber-500 animate-pulse')
+                  }
+                />
+                Senest scrapet
               </span>
-            </>
+              <span className="font-medium tabular-nums text-slate-900">
+                {new Date(lastJob.startedAt).toLocaleString('da-DK', { dateStyle: 'medium', timeStyle: 'short' })}
+              </span>
+              <span className="text-slate-400">·</span>
+              <span className="tabular-nums text-slate-600">{lastJob.scraped} fundet</span>
+              <span className="text-slate-300">·</span>
+              <span className="tabular-nums text-slate-600">{lastJob.newListings} nye</span>
+            </div>
           ) : (
             <span className="text-slate-500">Ingen scrapes endnu — start nu for at hente data fra Boligsiden.</span>
           )}
@@ -185,79 +198,112 @@ export function OnMarketClient({
         </button>
       </div>
 
-      {/* Filter bar */}
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white p-3 text-sm">
-        <input
-          placeholder="Søg adresse..."
-          value={s.q}
-          onChange={(e) => setS((p) => ({ ...p, q: e.target.value }))}
-          className="rounded-md border border-slate-300 px-2 py-1.5"
-        />
-        <select
-          value={s.bydel}
-          onChange={(e) => setS((p) => ({ ...p, bydel: e.target.value }))}
-          className="rounded-md border border-slate-300 px-2 py-1.5"
-        >
-          <option value="">Alle bydele</option>
-          {Object.entries(BYDEL_LABEL).map(([k, v]) => (
-            <option key={k} value={k}>{v}</option>
-          ))}
-        </select>
-        <select
-          value={s.review}
-          onChange={(e) => setS((p) => ({ ...p, review: e.target.value as State['review'] }))}
-          className="rounded-md border border-slate-300 px-2 py-1.5"
-        >
-          <option value="">Alle reviews</option>
-          {(Object.keys(REVIEW_LABEL) as ReviewStatus[]).map((r) => (
-            <option key={r} value={r}>{REVIEW_LABEL[r]}</option>
-          ))}
-        </select>
-        <span className="text-slate-400">kvm:</span>
-        <input
-          type="number"
-          placeholder="min"
-          value={s.minKvm}
-          onChange={(e) => setS((p) => ({ ...p, minKvm: e.target.value }))}
-          className="w-20 rounded-md border border-slate-300 px-2 py-1.5"
-        />
-        <input
-          type="number"
-          placeholder="max"
-          value={s.maxKvm}
-          onChange={(e) => setS((p) => ({ ...p, maxKvm: e.target.value }))}
-          className="w-20 rounded-md border border-slate-300 px-2 py-1.5"
-        />
-        <span className="text-slate-400">pris (kr):</span>
-        <input
-          type="number"
-          placeholder="min"
-          value={s.minPris}
-          onChange={(e) => setS((p) => ({ ...p, minPris: e.target.value }))}
-          className="w-32 rounded-md border border-slate-300 px-2 py-1.5"
-        />
-        <input
-          type="number"
-          placeholder="max"
-          value={s.maxPris}
-          onChange={(e) => setS((p) => ({ ...p, maxPris: e.target.value }))}
-          className="w-32 rounded-md border border-slate-300 px-2 py-1.5"
-        />
-        <label className="ml-2 inline-flex cursor-pointer items-center gap-1.5 text-xs">
+      {/* Filter bar — grouped + sticky */}
+      <div className="sticky top-2 z-10 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white/95 p-2.5 text-sm shadow-sm backdrop-blur-sm">
+        {/* Søg */}
+        <div className="relative">
+          <svg className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8" />
+            <path d="m21 21-4.3-4.3" />
+          </svg>
+          <input
+            placeholder="Søg adresse…"
+            value={s.q}
+            onChange={(e) => setS((p) => ({ ...p, q: e.target.value }))}
+            className="w-56 rounded-md border border-slate-200 bg-slate-50 py-1.5 pl-8 pr-2 text-sm transition-colors duration-150 ease-[var(--ease-out)] placeholder:text-slate-400 hover:bg-white hover:border-slate-300 focus:bg-white focus:border-slate-400"
+          />
+        </div>
+
+        <div className="h-6 w-px bg-slate-200" />
+
+        {/* Bydel + Review */}
+        <div className="flex items-center gap-2">
+          <select
+            value={s.bydel}
+            onChange={(e) => setS((p) => ({ ...p, bydel: e.target.value }))}
+            className="cursor-pointer rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-sm transition-colors duration-150 ease-[var(--ease-out)] hover:bg-white hover:border-slate-300"
+          >
+            <option value="">Alle bydele</option>
+            {Object.entries(BYDEL_LABEL).map(([k, v]) => (
+              <option key={k} value={k}>{v}</option>
+            ))}
+          </select>
+          <select
+            value={s.review}
+            onChange={(e) => setS((p) => ({ ...p, review: e.target.value as State['review'] }))}
+            className="cursor-pointer rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-sm transition-colors duration-150 ease-[var(--ease-out)] hover:bg-white hover:border-slate-300"
+          >
+            <option value="">Alle reviews</option>
+            {(Object.keys(REVIEW_LABEL) as ReviewStatus[]).map((r) => (
+              <option key={r} value={r}>{REVIEW_LABEL[r]}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="h-6 w-px bg-slate-200" />
+
+        {/* kvm range */}
+        <div className="inline-flex items-center overflow-hidden rounded-md border border-slate-200 bg-slate-50 transition-colors duration-150 ease-[var(--ease-out)] hover:bg-white hover:border-slate-300">
+          <span className="px-2 text-xs font-medium text-slate-500">kvm</span>
+          <input
+            type="number"
+            placeholder="min"
+            value={s.minKvm}
+            onChange={(e) => setS((p) => ({ ...p, minKvm: e.target.value }))}
+            className="w-14 border-l border-slate-200 bg-transparent px-2 py-1.5 text-sm placeholder:text-slate-400"
+          />
+          <span className="text-slate-300">–</span>
+          <input
+            type="number"
+            placeholder="max"
+            value={s.maxKvm}
+            onChange={(e) => setS((p) => ({ ...p, maxKvm: e.target.value }))}
+            className="w-14 bg-transparent px-2 py-1.5 text-sm placeholder:text-slate-400"
+          />
+        </div>
+
+        {/* pris range */}
+        <div className="inline-flex items-center overflow-hidden rounded-md border border-slate-200 bg-slate-50 transition-colors duration-150 ease-[var(--ease-out)] hover:bg-white hover:border-slate-300">
+          <span className="px-2 text-xs font-medium text-slate-500">pris</span>
+          <input
+            type="number"
+            placeholder="min"
+            value={s.minPris}
+            onChange={(e) => setS((p) => ({ ...p, minPris: e.target.value }))}
+            className="w-24 border-l border-slate-200 bg-transparent px-2 py-1.5 text-sm placeholder:text-slate-400"
+          />
+          <span className="text-slate-300">–</span>
+          <input
+            type="number"
+            placeholder="max"
+            value={s.maxPris}
+            onChange={(e) => setS((p) => ({ ...p, maxPris: e.target.value }))}
+            className="w-24 bg-transparent px-2 py-1.5 text-sm placeholder:text-slate-400"
+          />
+        </div>
+
+        <label className="ml-1 inline-flex cursor-pointer select-none items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-slate-600 transition-colors duration-150 ease-[var(--ease-out)] hover:bg-slate-100">
           <input
             type="checkbox"
             checked={s.onlyAlpha}
             onChange={(e) => setS((p) => ({ ...p, onlyAlpha: e.target.checked }))}
+            className="h-3.5 w-3.5 cursor-pointer accent-slate-900"
           />
           Kun positiv α
         </label>
-        <span className="ml-auto text-xs text-slate-500">{filtered.length} af {rows.length} aktive</span>
-        <button
-          onClick={() => setS(DEFAULT_STATE)}
-          className="rounded px-2 py-1 text-xs text-slate-500 transition-colors duration-150 ease-[var(--ease-out)] hover:bg-slate-100 hover:text-slate-900 active:scale-[0.97]"
-        >
-          Nulstil
-        </button>
+
+        <div className="ml-auto flex items-center gap-3">
+          <span className="text-xs tabular-nums text-slate-500">
+            <span className="font-medium text-slate-700">{filtered.length}</span>
+            <span className="text-slate-400"> / {rows.length}</span>
+          </span>
+          <button
+            onClick={() => setS(DEFAULT_STATE)}
+            className="rounded-md px-2 py-1 text-xs text-slate-500 transition-colors duration-150 ease-[var(--ease-out)] hover:bg-slate-100 hover:text-slate-900 active:scale-[0.97]"
+          >
+            Nulstil
+          </button>
+        </div>
       </div>
 
       {/* Tabel */}

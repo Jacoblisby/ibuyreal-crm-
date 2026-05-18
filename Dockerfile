@@ -9,18 +9,17 @@ RUN npm ci --omit=dev
 FROM node:20-slim AS builder
 WORKDIR /app
 COPY package.json package-lock.json* ./
-# --include=dev tvinger devDeps (Tailwind, drizzle-kit, etc.) selv hvis
-# NODE_ENV=production er sat som build-arg (Coolify injecter sådanne).
+# --include=dev tvinger devDeps (Tailwind, drizzle-kit) selv om NODE_ENV
+# er sat til production af Coolify's build-args.
 RUN npm ci --include=dev
 COPY . .
 ARG DATABASE_URL=""
 ARG NEXT_PUBLIC_APP_URL=""
 ENV DATABASE_URL=$DATABASE_URL
 ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
-# Build kører som dev så Tailwind PostCSS-plugin er tilgængelig
-ENV NODE_ENV=development
-RUN npm run build
+# NODE_ENV=production for at Next.js bygger production-mode artifacts
 ENV NODE_ENV=production
+RUN npm run build
 
 FROM node:20-slim AS runner
 WORKDIR /app

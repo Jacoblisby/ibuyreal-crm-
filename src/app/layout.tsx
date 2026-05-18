@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { Toaster } from 'sonner';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -16,18 +17,38 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Link href="/" className="text-base font-semibold tracking-tight">
               iBuyReal <span className="text-slate-400">CRM</span>
             </Link>
-            <nav className="flex items-center gap-6 text-sm text-slate-600">
-              <Link href="/" className="hover:text-slate-900">Dashboard</Link>
-              <Link href="/calculator" className="hover:text-slate-900">Boligberegner</Link>
-              <Link href="/on-market" className="hover:text-slate-900">On-market</Link>
-              <Link href="/screening" className="hover:text-slate-900">Screening</Link>
-              <Link href="/pipeline" className="hover:text-slate-900">Pipeline</Link>
-              <Link href="/investors" className="hover:text-slate-900">Investorer</Link>
-              <Link href="/settings" className="hover:text-slate-900">Antagelser</Link>
+            <nav className="flex items-center gap-1 text-sm text-slate-600">
+              {[
+                { href: '/', label: 'Dashboard' },
+                { href: '/calculator', label: 'Boligberegner' },
+                { href: '/on-market', label: 'On-market' },
+                { href: '/screening', label: 'Screening' },
+                { href: '/pipeline', label: 'Pipeline' },
+                { href: '/investors', label: 'Investorer' },
+                { href: '/settings', label: 'Antagelser' },
+              ].map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className="rounded-md px-3 py-1.5 text-slate-600 transition-colors duration-150 ease-[var(--ease-out)] hover:bg-slate-100 hover:text-slate-900 active:scale-[0.97]"
+                >
+                  {item.label}
+                </Link>
+              ))}
             </nav>
           </div>
         </header>
         <main className="mx-auto max-w-7xl px-6 py-8">{children}</main>
+        <Toaster
+          position="bottom-right"
+          closeButton
+          richColors
+          toastOptions={{
+            classNames: {
+              toast: 'font-sans',
+            },
+          }}
+        />
       </body>
     </html>
   );

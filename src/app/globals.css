@@ -7,10 +7,58 @@
   --accent: #2563eb;
   --muted: #64748b;
   --border: #e2e8f0;
+
+  /* Strong custom easing curves — Tailwind defaults er svage.
+     Brug --ease-out til entry/UI feedback, --ease-in-out til on-screen motion. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+}
+
+@theme inline {
+  --ease-snap: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-smooth: cubic-bezier(0.77, 0, 0.175, 1);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom focus-visible — kun keyboard-focus, ikke mouse. */
+*:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px white, 0 0 0 4px rgb(15 23 42 / 0.85);
+  border-radius: 6px;
+  transition: box-shadow 120ms var(--ease-out);
+}
+
+/* Stagger animation for tabel-rækker. */
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.row-stagger {
+  animation: row-in 280ms var(--ease-out) backwards;
+}
+
+/* Reduceret motion respekt. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

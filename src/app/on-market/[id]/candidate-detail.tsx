@@ -526,8 +526,8 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
         </div>
       ) : (
         <>
-          {/* KPIs */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {/* KPIs — primær række */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
             <Kpi
               label="Alpha"
               value={formatPct(live.calc.alpha)}
@@ -535,9 +535,19 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
               sub="(FMV − investeret) / investeret"
             />
             <Kpi
-              label="FMV"
+              label="iBuyReal AVM"
               value={formatKr(live.fmv)}
-              sub={c.v3FmvSource === 'ibuyreal-avm' ? 'iBuyReal AVM' : 'listPris fallback'}
+              sub={c.v3FmvSource === 'ibuyreal-avm' ? 'XGBoost prediction' : 'listPris fallback'}
+              accent={c.v3FmvSource === 'ibuyreal-avm' ? 'emerald' : undefined}
+            />
+            <Kpi
+              label="Boligsiden AVM"
+              value={c.latestValuation ? formatKr(c.latestValuation) : '—'}
+              sub={
+                c.latestValuation
+                  ? `${(((c.latestValuation - live.udbud) / live.udbud) * 100).toFixed(1)}% vs udbud · kun reference`
+                  : 'ingen BS-data'
+              }
             />
             <Kpi label="Investeret" value={formatKr(live.calc.investeret)} sub="tilbudspris + tx" />
             <Kpi

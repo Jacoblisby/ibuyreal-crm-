@@ -261,63 +261,73 @@ export function OnMarketClient({
       </div>
 
       {/* Tabel */}
-      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+          <thead className="border-b border-slate-200 bg-slate-50/80 text-left text-[11px] font-medium uppercase tracking-wider text-slate-500">
             <tr>
-              <th className="px-3 py-2">Adresse</th>
-              <th className="px-3 py-2">Bydel</th>
-              <th className="px-3 py-2 text-right">kvm</th>
-              <th className="px-3 py-2 text-right">vær</th>
-              <th className="px-3 py-2 text-right">Bygget</th>
-              <th className="px-3 py-2 text-right">Pris</th>
-              <th className="px-3 py-2 text-right">kr/m²</th>
-              <th className="px-3 py-2 text-right">Dage</th>
-              <th className="px-3 py-2 text-right">FMV</th>
-              <th className="px-3 py-2 text-right" title="Alpha = (FMV - investeret) / investeret. Positiv = underpriset.">α (V3)</th>
-              <th className="px-3 py-2 text-right" title="Best-case afkast = α + 14.8% beta + Airbnb cf-yield">Best</th>
-              <th className="px-3 py-2">Mægler</th>
-              <th className="px-3 py-2">Review</th>
-              <th className="px-3 py-2">Handling</th>
+              <th className="px-3 py-2.5">Adresse</th>
+              <th className="px-3 py-2.5">Bydel</th>
+              <th className="px-3 py-2.5 text-right">kvm</th>
+              <th className="px-3 py-2.5 text-right">vær</th>
+              <th className="px-3 py-2.5 text-right">Bygget</th>
+              <th className="px-3 py-2.5 text-right">Pris</th>
+              <th className="px-3 py-2.5 text-right">kr/m²</th>
+              <th className="px-3 py-2.5 text-right">Dage</th>
+              <th className="px-3 py-2.5 text-right">FMV</th>
+              <th className="px-3 py-2.5 text-right" title="Alpha = (FMV - investeret) / investeret. Positiv = underpriset.">α</th>
+              <th className="px-3 py-2.5 text-right" title="Best-case afkast = α + 14.8% beta + Airbnb cf-yield">Best</th>
+              <th className="px-3 py-2.5">Mægler</th>
+              <th className="px-3 py-2.5">Review</th>
+              <th className="px-3 py-2.5"></th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map((r) => {
+            {filtered.map((r, idx) => {
               const review = r.reviewStatus as ReviewStatus;
               const importedAlready = !!r.convertedPropertyId;
               return (
-                <tr key={r.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50">
-                  <td className="px-3 py-2 font-medium text-slate-900">
-                    <a href={`/on-market/${r.id}`} className="hover:text-blue-600">
+                <tr
+                  key={r.id}
+                  className="row-stagger group border-b border-slate-100 transition-colors duration-100 ease-[var(--ease-out)] last:border-0 hover:bg-slate-50"
+                  style={{ animationDelay: `${Math.min(idx, 12) * 25}ms` }}
+                >
+                  <td className="px-3 py-2.5 font-medium text-slate-900">
+                    <a
+                      href={`/on-market/${r.id}`}
+                      className="rounded-sm decoration-slate-300 decoration-1 underline-offset-2 transition-colors duration-100 ease-[var(--ease-out)] hover:text-blue-700 hover:underline"
+                    >
                       {r.address}
                     </a>
                     <div className="text-xs text-slate-400">{r.postalCode} {r.city}</div>
                   </td>
-                  <td className="px-3 py-2 text-slate-600">
+                  <td className="px-3 py-2.5 text-slate-600">
                     {r.bydel ? BYDEL_LABEL[r.bydel] ?? r.bydel : '–'}
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatNum(r.kvm)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{r.rooms ?? '–'}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-xs text-slate-500">
+                  <td className="px-3 py-2.5 text-right tabular-nums">{formatNum(r.kvm)}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums">{r.rooms ?? '–'}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-xs text-slate-500">
                     {r.yearBuilt ?? '–'}
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatKr(r.listPrice)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-xs text-slate-500">
+                  <td className="px-3 py-2.5 text-right tabular-nums">{formatKr(r.listPrice)}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-xs text-slate-500">
                     {formatKr(r.perAreaPrice)}
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums text-xs text-slate-500">
+                  <td className="px-3 py-2.5 text-right tabular-nums text-xs text-slate-500">
                     {r.daysOnMarket ?? '–'}
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums text-xs">
+                  <td className="px-3 py-2.5 text-right tabular-nums text-xs">
                     {r.v3Fmv ? formatKr(r.v3Fmv) : '–'}
                   </td>
                   <td
                     className={
-                      'px-3 py-2 text-right tabular-nums font-medium ' +
+                      'px-3 py-2.5 text-right tabular-nums font-semibold ' +
                       (r.v3Alpha === null
                         ? 'text-slate-400'
-                        : r.v3Alpha > 0
+                        : r.v3Alpha > 0.05
                         ? 'text-emerald-700'
+                        : r.v3Alpha > 0
+                        ? 'text-emerald-600'
                         : 'text-rose-600')
                     }
                   >
@@ -325,17 +335,19 @@ export function OnMarketClient({
                   </td>
                   <td
                     className={
-                      'px-3 py-2 text-right tabular-nums font-medium ' +
+                      'px-3 py-2.5 text-right tabular-nums font-semibold ' +
                       (r.v3AfkastBest === null
                         ? 'text-slate-400'
-                        : r.v3AfkastBest > 0
+                        : r.v3AfkastBest > 0.2
                         ? 'text-emerald-700'
+                        : r.v3AfkastBest > 0
+                        ? 'text-emerald-600'
                         : 'text-rose-600')
                     }
                   >
                     {r.v3AfkastBest === null ? '–' : formatPct(r.v3AfkastBest)}
                   </td>
-                  <td className="px-3 py-2 text-xs text-slate-600">{r.brokerKind}</td>
+                  <td className="px-3 py-2.5 text-xs capitalize text-slate-500">{r.brokerKind}</td>
                   <td className="px-3 py-2">
                     <select
                       value={review}
@@ -380,15 +392,31 @@ export function OnMarketClient({
             })}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={14} className="px-3 py-12 text-center text-sm text-slate-400">
-                  {rows.length === 0
-                    ? 'Ingen scrape data endnu — klik "Scrape Boligsiden nu".'
-                    : 'Ingen kandidater matcher filtrene.'}
+                <td colSpan={14} className="px-3 py-16">
+                  <div className="mx-auto flex max-w-sm flex-col items-center gap-3 text-center">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+                      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="11" cy="11" r="8" />
+                        <path d="m21 21-4.3-4.3" />
+                      </svg>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium text-slate-700">
+                        {rows.length === 0 ? 'Ingen scrape-data endnu' : 'Ingen match på filtrene'}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {rows.length === 0
+                          ? 'Klik "Scrape Boligsiden nu" øverst for at hente listings.'
+                          : 'Prøv at justere filtrene eller nulstil dem.'}
+                      </p>
+                    </div>
+                  </div>
                 </td>
               </tr>
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

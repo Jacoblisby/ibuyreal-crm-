@@ -51,8 +51,12 @@ interface InputState {
 
 function buildInitialInputs(c: OnMarketCandidate): InputState {
   const yearlyFaelles = c.monthlyExpense ? Math.round(c.monthlyExpense * 12) : 0;
+  // Brug iBuyReal AVM som default FMV hvis tilgængelig, ellers fallback til listPrice
+  const defaultFmv = c.v3FmvSource === 'ibuyreal-avm' && c.v3Fmv
+    ? Math.round(c.v3Fmv)
+    : (c.listPrice ?? 0);
   return {
-    fmv: String(c.listPrice ?? 0), // FMV = list price indtil XGBoost-AVM
+    fmv: String(defaultFmv),
     tilbudPris: String(c.listPrice ?? 0),
     ejSkat: '0',
     ejGrundskyld: '0',

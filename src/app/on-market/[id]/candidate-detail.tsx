@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import {
   calculateProperty,
   getRoomFactor,
@@ -178,6 +179,9 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
 
   async function setReview(rs: Review) {
     setBusy(true);
+    // Optimistic update — UI svarer instantly
+    const prev = c;
+    setC({ ...c, reviewStatus: rs });
     try {
       const r = await fetch(`/api/on-market/${c.id}`, {
         method: 'PATCH',
@@ -187,14 +191,18 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
       if (!r.ok) throw new Error('Update fejlede');
       const updated = (await r.json()) as OnMarketCandidate;
       setC(updated);
+      toast.success(REVIEW_LABEL[rs], { duration: 1800 });
+    } catch (e) {
+      setC(prev);
+      toast.error(e instanceof Error ? e.message : 'Kunne ikke opdatere');
     } finally {
       setBusy(false);
     }
   }
 
   async function importToPipeline() {
-    if (!confirm('Importér til pipelinen som ny screening-case?')) return;
     setBusy(true);
+    const t = toast.loading('Importerer til pipelinen…');
     try {
       const r = await fetch(`/api/on-market/${c.id}/import`, { method: 'POST' });
       if (!r.ok) {
@@ -202,9 +210,10 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
         throw new Error(err.error ?? 'Import fejlede');
       }
       const data = (await r.json()) as { propertyId: string };
+      toast.success('Importeret som screening-case', { id: t });
       router.push(`/cases/${data.propertyId}`);
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Fejl');
+      toast.error(e instanceof Error ? e.message : 'Fejl', { id: t });
       setBusy(false);
     }
   }

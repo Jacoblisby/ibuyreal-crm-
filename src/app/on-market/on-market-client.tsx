@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import type { OnMarketCandidate, ScrapeJob } from '@/lib/db/schema';
 import { formatKr, formatNum, formatPct } from '@/lib/format';
 import { BYDEL_LABEL } from '@/lib/status';
@@ -73,9 +74,8 @@ export function OnMarketClient({
   }, [rows, s]);
 
   async function startScrape() {
-    if (!confirm('Scrape Boligsiden nu? Tager ~30-60 sekunder.')) return;
     setScraping(true);
-    try {
+    const promise = (async () => {
       const res = await fetch('/api/on-market/scrape', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -85,48 +85,70 @@ export function OnMarketClient({
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error ?? `Scrape fejlede: ${res.status}`);
       }
-      const data = (await res.json()) as {
+      return (await res.json()) as {
         scraped: number;
         newListings: number;
         updated: number;
         markedSold: number;
         durationSeconds: number;
       };
-      alert(
-        `Scrape færdig på ${data.durationSeconds.toFixed(1)}s\n` +
-          `${data.scraped} fundet · ${data.newListings} nye · ${data.updated} opdaterede · ${data.markedSold} solgte`,
-      );
+    })();
+
+    toast.promise(promise, {
+      loading: 'Scraper Boligsiden…',
+      success: (data) =>
+        `${data.scraped} fundet · ${data.newListings} nye · ${data.markedSold} solgte (${data.durationSeconds.toFixed(1)}s)`,
+      error: (e) => (e instanceof Error ? e.message : 'Scrape fejlede'),
+    });
+
+    try {
+      await promise;
       router.refresh();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : 'Fejl');
+    } catch {
+      // toast.promise viser fejlen — vi spiser den her
     } finally {
       setScraping(false);
     }
   }
 
-  async function setReview(id: string, review: ReviewStatus) {
+  async function setReview(id: string, review: ReviewStatus, address: string) {
     await fetch(`/api/on-market/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reviewStatus: review }),
     });
+    toast.success(`${address.split(',')[0]} → ${REVIEW_LABEL[review]}`, { duration: 2000 });
     router.refresh();
   }
 
-  async function importCandidate(id: string) {
-    if (!confirm('Importér til pipelinen som ny screening-case?')) return;
-    const res = await fetch(`/api/on-market/${id}/import`, { method: 'POST' });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      alert(err.error ?? 'Import fejlede');
-      return;
-    }
-    const data = (await res.json()) as { propertyId: string };
-    if (confirm('Importeret. Åbn case nu?')) {
-      router.push(`/cases/${data.propertyId}`);
-    } else {
-      router.refresh();
-    }
+  async function importCandidate(id: string, address: string) {
+    toast(`Importér "${address.split(',')[0]}" til pipelinen?`, {
+      action: {
+        label: 'Importér',
+        onClick: async () => {
+          const t = toast.loading('Importerer…');
+          try {
+            const res = await fetch(`/api/on-market/${id}/import`, { method: 'POST' });
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({}));
+              throw new Error(err.error ?? 'Import fejlede');
+            }
+            const data = (await res.json()) as { propertyId: string };
+            toast.success('Importeret', {
+              id: t,
+              description: 'Casen er klar i pipelinen',
+              action: {
+                label: 'Åbn case',
+                onClick: () => router.push(`/cases/${data.propertyId}`),
+              },
+            });
+            router.refresh();
+          } catch (e) {
+            toast.error(e instanceof Error ? e.message : 'Import fejlede', { id: t });
+          }
+        },
+      },
+    });
   }
 
   return (
@@ -311,7 +333,7 @@ export function OnMarketClient({
                   <td className="px-3 py-2">
                     <select
                       value={review}
-                      onChange={(e) => setReview(r.id, e.target.value as ReviewStatus)}
+                      onChange={(e) => setReview(r.id, e.target.value as ReviewStatus, r.address)}
                       disabled={importedAlready}
                       className={
                         'rounded-md border-0 px-2 py-1 text-xs font-medium ' + REVIEW_COLOR[review]
@@ -332,7 +354,7 @@ export function OnMarketClient({
                       </a>
                     ) : (
                       <button
-                        onClick={() => importCandidate(r.id)}
+                        onClick={() => importCandidate(r.id, r.address)}
                         className="rounded-md bg-slate-900 px-2 py-1 text-xs font-medium text-white hover:bg-slate-800"
                       >
                         Importér

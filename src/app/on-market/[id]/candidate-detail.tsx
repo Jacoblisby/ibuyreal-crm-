@@ -919,6 +919,9 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
             </div>
           </div>
 
+          {/* Tidligere handler — full width */}
+          <HistoryPanel candidate={c} liveFmv={live.fmv} kvm={kvm} listPrice={c.listPrice ?? 0} />
+
           {/* Mæglerbeskrivelse */}
           {(c.descriptionTitle || c.description) && (
             <Panel title="Mæglerbeskrivelse">
@@ -981,6 +984,191 @@ function Field({
       </span>
       {children}
     </label>
+  );
+}
+
+function HistoryPanel({
+  candidate,
+  liveFmv,
+  kvm,
+  listPrice,
+}: {
+  candidate: OnMarketCandidate;
+  liveFmv: number;
+  kvm: number;
+  listPrice: number;
+}) {
+  const sales = (candidate.historicalSales as Array<{ date: string; amount: number; type: string }> | null) ?? [];
+  const normal = sales.filter((s) => s.type === 'normal' && s.amount > 100_000);
+  const latest = normal[0];
+
+  // CAGR-beregning vs liveFmv og listPrice
+  let cagrToFmv: number | null = null;
+  let cagrToList: number | null = null;
+  let yearsElapsed: number | null = null;
+  if (latest) {
+    const latestYear = parseInt(latest.date.slice(0, 4));
+    yearsElapsed = new Date().getFullYear() - latestYear;
+    if (yearsElapsed > 0) {
+      cagrToFmv = (Math.pow(liveFmv / latest.amount, 1 / yearsElapsed) - 1) * 100;
+      cagrToList = (Math.pow(listPrice / latest.amount, 1 / yearsElapsed) - 1) * 100;
+    }
+  }
+
+  // Verdict for AVM-overshoot
+  const overshoot =
+    cagrToFmv !== null && cagrToList !== null ? cagrToFmv - cagrToList : null;
+  const verdict =
+    overshoot === null
+      ? null
+      : overshoot < 1.5
+      ? { color: 'emerald', label: 'I tråd med marked' }
+      : overshoot < 3.5
+      ? { color: 'amber', label: 'Lidt optimistisk' }
+      : { color: 'rose', label: 'AVM overshooter' };
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-[13px] font-semibold tracking-tight text-slate-900">
+          Tidligere handler & prisudvikling
+        </h3>
+        {verdict && (
+          <span
+            className={
+              'rounded-full px-2 py-0.5 text-[10px] font-medium ' +
+              (verdict.color === 'emerald'
+                ? 'bg-emerald-100 text-emerald-700'
+                : verdict.color === 'amber'
+                ? 'bg-amber-100 text-amber-700'
+                : 'bg-rose-100 text-rose-700')
+            }
+          >
+            {verdict.label}
+          </span>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {/* Venstre: handelshistorik tabel */}
+        <div>
+          <div className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">
+            Registrerede handler (Boligsiden)
+          </div>
+          {sales.length === 0 ? (
+            <p className="text-sm text-slate-400">
+              Ingen historiske handler registreret for adressen.
+            </p>
+          ) : (
+            <div className="space-y-1.5 text-sm">
+              {sales.slice(0, 10).map((s, i) => (
+                <div
+                  key={i}
+                  className={
+                    'flex items-baseline justify-between gap-3 rounded-md px-2 py-1.5 ' +
+                    (s.type === 'normal' ? 'bg-slate-50' : 'opacity-60')
+                  }
+                >
+                  <div className="flex items-baseline gap-2">
+                    <span className="tabular-nums font-medium text-slate-700">{s.date}</span>
+                    <span className="text-[10px] uppercase tracking-wider text-slate-400">
+                      {s.type}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="tabular-nums font-semibold text-slate-900">
+                      {formatKr(s.amount)}
+                    </span>
+                    {kvm > 0 && (
+                      <span className="ml-2 tabular-nums text-xs text-slate-500">
+                        {formatKr(s.amount / kvm)}/m²
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {candidate.publicValuation && (
+            <div className="mt-3 border-t border-slate-100 pt-2 text-xs text-slate-500">
+              Offentlig vurdering (SKAT):{' '}
+              <span className="font-medium tabular-nums text-slate-700">
+                {formatKr(candidate.publicValuation)}
+              </span>
+              <span className="ml-1 text-slate-400">— typisk forældet, kun reference</span>
+            </div>
+          )}
+        </div>
+
+        {/* Højre: CAGR-analyse */}
+        <div>
+          <div className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">
+            Implicit prisudvikling (CAGR)
+          </div>
+          {latest && yearsElapsed ? (
+            <div className="space-y-3 text-sm">
+              <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+                <div className="text-xs text-slate-500">Sidste handel</div>
+                <div className="mt-0.5 flex items-baseline justify-between">
+                  <span className="text-base font-semibold tabular-nums">
+                    {formatKr(latest.amount)}
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    {latest.date} · {yearsElapsed} år siden
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-baseline justify-between text-sm">
+                  <span className="text-slate-600">Udbudspris implicerer</span>
+                  <span className="tabular-nums font-medium text-slate-900">
+                    {cagrToList!.toFixed(1)}% pa
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between text-sm">
+                  <span className="text-slate-600">FMV implicerer</span>
+                  <span className="tabular-nums font-semibold text-slate-900">
+                    {cagrToFmv!.toFixed(1)}% pa
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between border-t border-slate-100 pt-2 text-xs text-slate-500">
+                  <span>Overshoot (FMV vs udbud)</span>
+                  <span
+                    className={
+                      'tabular-nums font-medium ' +
+                      (overshoot! < 1.5
+                        ? 'text-emerald-600'
+                        : overshoot! < 3.5
+                        ? 'text-amber-600'
+                        : 'text-rose-600')
+                    }
+                  >
+                    {overshoot! > 0 ? '+' : ''}
+                    {overshoot!.toFixed(1)}pp
+                  </span>
+                </div>
+              </div>
+
+              <div className="rounded-md border border-slate-100 bg-white p-3 text-xs text-slate-500">
+                <p>
+                  <strong className="text-slate-700">Tommelfingerregel:</strong> historisk KBH-condo
+                  CAGR ligger på 5-7% over lange horisonter, op til 10% i boom-perioder.
+                </p>
+                <p className="mt-1">
+                  Hvis FMV-CAGR &gt; 8-9% over en periode med fresh data, er det sandsynligvis
+                  optimistisk.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-400">
+              Mangler nylig handelsdata til CAGR-beregning.
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 

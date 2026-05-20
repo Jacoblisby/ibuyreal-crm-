@@ -15,7 +15,11 @@ import { calculateProperty } from './calculator';
 import { db } from './db/client';
 import { onMarketCandidates, scrapeJobs } from './db/schema';
 import { bydelFromPostnr, DEFAULT_SCRAPE_POSTNUMRE } from './postnumre';
-import { searchCondos, type ScrapedListing } from './services/boligsiden';
+import {
+  fetchAddressDetailsBatch,
+  searchCondos,
+  type ScrapedListing,
+} from './services/boligsiden';
 import { estimateFmv, fetchAvmBatch, type AvmPrediction } from './avm';
 import type { Bydel } from './types';
 
@@ -131,7 +135,7 @@ export async function runScrapeJob(opts: ScrapeRunOptions = {}): Promise<ScrapeR
     const seenSlugs: string[] = listings.map((l) => l.slug);
     console.log(`[scrape] ${scraped} listings hentet`);
 
-    // 3. Batch-fetch AVM predictions
+    // 3a. Batch-fetch AVM predictions
     const addressIds = listings
       .map((l) => l.addressId)
       .filter((x): x is string => !!x);
@@ -142,6 +146,17 @@ export async function runScrapeJob(opts: ScrapeRunOptions = {}): Promise<ScrapeR
     console.log(
       `[scrape] AVM ${avmPredicted}/${addressIds.length} predicted på ${(
         (Date.now() - avmStart) /
+        1000
+      ).toFixed(1)}s`,
+    );
+
+    // 3b. Batch-fetch tidligere handler + offentlig vurdering
+    console.log(`[scrape] Henter historik for ${addressIds.length} addresser...`);
+    const historyStart = Date.now();
+    const historyMap = await fetchAddressDetailsBatch(addressIds, { concurrency: 12 });
+    console.log(
+      `[scrape] Historik for ${historyMap.size}/${addressIds.length} på ${(
+        (Date.now() - historyStart) /
         1000
       ).toFixed(1)}s`,
     );
@@ -170,6 +185,12 @@ export async function runScrapeJob(opts: ScrapeRunOptions = {}): Promise<ScrapeR
       const manualFmv = existing[0]?.manualFmv ?? null;
       const v3 = runV3OnListing(l, bydel, avmPrediction, manualFmv);
 
+      // Historik fra Boligsiden /addresses/{uuid}
+      const history = l.addressId ? historyMap.get(l.addressId) : undefined;
+      const lastNormalSale = history?.registrations.find(
+        (r) => r.type === 'normal' && r.amount > 100_000,
+      );
+
       const values = {
         source: 'boligsiden',
         sourceId: l.slug,
@@ -195,6 +216,10 @@ export async function runScrapeJob(opts: ScrapeRunOptions = {}): Promise<ScrapeR
         description: l.description,
         descriptionTitle: l.descriptionTitle,
         estimatedAlpha,
+        historicalSales: history?.registrations ?? [],
+        lastSaleDate: lastNormalSale?.date ?? null,
+        lastSaleAmount: lastNormalSale?.amount ?? null,
+        publicValuation: history?.publicValuation ?? null,
         ...(v3 ?? {}),
         lastSeenAt: new Date(),
         status: 'active',

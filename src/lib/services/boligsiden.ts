@@ -57,6 +57,71 @@ interface SearchResponse {
   totalHits?: number;
 }
 
+export interface AddressDetails {
+  registrations: Array<{ date: string; amount: number; type: string }>;
+  publicValuation: number | null; // latestValuation (SKAT/offentlig)
+}
+
+/**
+ * Hent fuld adresse-detalje fra Boligsiden — inkluderer tidligere handler,
+ * offentlig vurdering, BBR-data.
+ *
+ * Cacheable (next.js fetch cache), 24-timers TTL.
+ */
+export async function fetchAddressDetails(
+  dawaAddressId: string,
+): Promise<AddressDetails | null> {
+  try {
+    const r = await fetch(`https://api.boligsiden.dk/addresses/${dawaAddressId}`, {
+      headers: { 'User-Agent': UA, Accept: 'application/json' },
+      next: { revalidate: 86400 },
+    });
+    if (!r.ok) return null;
+    const data = (await r.json()) as {
+      latestValuation?: number;
+      registrations?: Array<{ amount?: number; date?: string; type?: string }>;
+    };
+    const regs = (data.registrations ?? [])
+      .filter(
+        (x): x is { amount: number; date: string; type: string } =>
+          typeof x.amount === 'number' &&
+          typeof x.date === 'string' &&
+          typeof x.type === 'string',
+      )
+      .sort((a, b) => (a.date < b.date ? 1 : -1)); // nyeste først
+    return {
+      registrations: regs,
+      publicValuation: data.latestValuation ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Batch-hent adresse-detaljer for mange DAWA IDs samtidigt (parallel).
+ * Vi sender op til `concurrency` requests parallelt for at undgå at hænge
+ * scrapen på serial 500ms × 500-kald.
+ */
+export async function fetchAddressDetailsBatch(
+  addressIds: string[],
+  opts: { concurrency?: number } = {},
+): Promise<Map<string, AddressDetails>> {
+  const concurrency = opts.concurrency ?? 12;
+  const map = new Map<string, AddressDetails>();
+  const queue = [...addressIds];
+  async function worker() {
+    while (queue.length > 0) {
+      const id = queue.shift();
+      if (!id) return;
+      const r = await fetchAddressDetails(id);
+      if (r) map.set(id, r);
+    }
+  }
+  await Promise.all(Array.from({ length: concurrency }, () => worker()));
+  return map;
+}
+
 export interface ScrapedListing {
   slug: string;
   url: string;

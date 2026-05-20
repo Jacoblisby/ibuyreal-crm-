@@ -277,6 +277,17 @@ export const onMarketCandidates = pgTable(
     manualFmvNote: text('manual_fmv_note'),
     manualFmvSetAt: timestamp('manual_fmv_set_at', { withTimezone: true }),
 
+    // Tidligere handler fra Boligsiden /addresses/{uuid}.registrations
+    // Bruges til CAGR-validation af AVM-FMV på detail-siden.
+    historicalSales: jsonb('historical_sales').$type<Array<{
+      date: string;        // ISO YYYY-MM-DD
+      amount: number;      // kr
+      type: string;        // 'normal' | 'family' | 'auction' | 'other'
+    }>>(),
+    lastSaleDate: text('last_sale_date'),     // denormaliseret seneste 'normal' handel
+    lastSaleAmount: doublePrecision('last_sale_amount'),
+    publicValuation: doublePrecision('public_valuation'), // offentlig vurdering (SKAT)
+
     // V3-screening cache — kører calculateProperty() med:
     //   FMV = iBuyReal AVM (predicted_price_per_sqm × kvm) eller listPrice som fallback
     //   ejTotal = monthlyExpense * 12

@@ -23,7 +23,10 @@ const REVIEW_COLOR: Record<ReviewStatus, string> = {
   importeret: 'bg-blue-100 text-blue-700',
 };
 
+type Preset = 'all' | 'core' | 'fallback';
+
 interface State {
+  preset: Preset;
   q: string;
   bydel: string;
   review: '' | ReviewStatus;
@@ -35,6 +38,7 @@ interface State {
 }
 
 const DEFAULT_STATE: State = {
+  preset: 'all',
   q: '',
   bydel: '',
   review: '',
@@ -43,6 +47,15 @@ const DEFAULT_STATE: State = {
   minPris: '',
   maxPris: '',
   onlyAlpha: false,
+};
+
+const PRESET_LABEL: Record<Preset, { label: string; desc: string }> = {
+  all: { label: 'Alle', desc: 'Vis alle aktive listings' },
+  core: {
+    label: 'Core picks',
+    desc: 'AVM-coverage · byggeår 1900-1995 · 50-100kvm · dage ≥30 · α 0-30%',
+  },
+  fallback: { label: 'Mangler AVM', desc: 'Kun cases hvor modellen ikke kunne predicte' },
 };
 
 export function OnMarketClient({
@@ -57,8 +70,54 @@ export function OnMarketClient({
   const [scraping, setScraping] = useState(false);
   const [s, setS] = useState<State>(DEFAULT_STATE);
 
+  // Beregn preset-counts altid (uafhængigt af andre filtre) til pill-badges
+  const activeRows = useMemo(() => rows.filter((x) => x.status === 'active'), [rows]);
+
+  const presetCounts = useMemo(() => {
+    const matches = (preset: Preset) => {
+      if (preset === 'all') return activeRows;
+      if (preset === 'fallback')
+        return activeRows.filter((x) => x.v3FmvSource !== 'ibuyreal-avm' && x.v3FmvSource !== 'manual');
+      // core
+      return activeRows.filter(
+        (x) =>
+          (x.v3FmvSource === 'ibuyreal-avm' || x.v3FmvSource === 'manual') &&
+          (x.yearBuilt ?? 0) >= 1900 &&
+          (x.yearBuilt ?? 9999) <= 1995 &&
+          (x.kvm ?? 0) >= 50 &&
+          (x.kvm ?? 0) <= 100 &&
+          (x.daysOnMarket ?? 0) >= 30 &&
+          (x.v3Alpha ?? 0) > 0 &&
+          (x.v3Alpha ?? 0) < 0.3,
+      );
+    };
+    return {
+      all: matches('all').length,
+      core: matches('core').length,
+      fallback: matches('fallback').length,
+    };
+  }, [activeRows]);
+
   const filtered = useMemo(() => {
-    let r = rows.filter((x) => x.status === 'active');
+    let r = activeRows;
+
+    // Apply preset først
+    if (s.preset === 'core') {
+      r = r.filter(
+        (x) =>
+          (x.v3FmvSource === 'ibuyreal-avm' || x.v3FmvSource === 'manual') &&
+          (x.yearBuilt ?? 0) >= 1900 &&
+          (x.yearBuilt ?? 9999) <= 1995 &&
+          (x.kvm ?? 0) >= 50 &&
+          (x.kvm ?? 0) <= 100 &&
+          (x.daysOnMarket ?? 0) >= 30 &&
+          (x.v3Alpha ?? 0) > 0 &&
+          (x.v3Alpha ?? 0) < 0.3,
+      );
+    } else if (s.preset === 'fallback') {
+      r = r.filter((x) => x.v3FmvSource !== 'ibuyreal-avm' && x.v3FmvSource !== 'manual');
+    }
+
     if (s.q) {
       const q = s.q.toLowerCase();
       r = r.filter((x) => x.address.toLowerCase().includes(q));
@@ -71,7 +130,7 @@ export function OnMarketClient({
     if (s.maxPris) r = r.filter((x) => (x.listPrice ?? 0) <= Number(s.maxPris));
     if (s.onlyAlpha) r = r.filter((x) => (x.v3Alpha ?? 0) > 0);
     return r;
-  }, [rows, s]);
+  }, [activeRows, s]);
 
   async function startScrape() {
     setScraping(true);
@@ -196,6 +255,40 @@ export function OnMarketClient({
           )}
           {scraping ? 'Scraper Boligsiden…' : 'Scrape Boligsiden nu'}
         </button>
+      </div>
+
+      {/* Preset pills */}
+      <div className="flex flex-wrap items-center gap-2">
+        {(['all', 'core', 'fallback'] as Preset[]).map((p) => {
+          const active = s.preset === p;
+          const meta = PRESET_LABEL[p];
+          return (
+            <button
+              key={p}
+              onClick={() => setS((st) => ({ ...st, preset: p }))}
+              title={meta.desc}
+              className={
+                'inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-medium transition-[background-color,color,box-shadow,transform] duration-150 ease-[var(--ease-out)] active:scale-[0.97] ' +
+                (active
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'border border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50')
+              }
+            >
+              <span>{meta.label}</span>
+              <span
+                className={
+                  'tabular-nums text-xs ' +
+                  (active ? 'text-slate-300' : 'text-slate-400')
+                }
+              >
+                {presetCounts[p]}
+              </span>
+            </button>
+          );
+        })}
+        <span className="ml-1 hidden text-xs text-slate-500 sm:inline">
+          {PRESET_LABEL[s.preset].desc}
+        </span>
       </div>
 
       {/* Filter bar — grouped + sticky */}

@@ -363,7 +363,19 @@ export function OnMarketClient({
                     {r.daysOnMarket ?? '–'}
                   </td>
                   <td className="px-3 py-2.5 text-right tabular-nums text-xs">
-                    {r.v3Fmv ? formatKr(r.v3Fmv) : '–'}
+                    {r.v3Fmv ? (
+                      <span className="inline-flex items-center gap-1">
+                        {formatKr(r.v3Fmv)}
+                        {r.v3FmvSource === 'manual' && (
+                          <span
+                            className="inline-block h-1.5 w-1.5 rounded-full bg-blue-500"
+                            title="Manuelt sat FMV"
+                          />
+                        )}
+                      </span>
+                    ) : (
+                      '–'
+                    )}
                   </td>
                   <td
                     className={

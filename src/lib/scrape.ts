@@ -45,19 +45,24 @@ function estimateBsAlpha(listing: ScrapedListing): number | null {
 /**
  * Kør V3-screening på en kandidat med given FMV.
  * On-market: tilbudPris = listPris (ingen off-market rabat).
+ *
+ * FMV-prioritet: manualFmv > AVM-prediction > listPris fallback.
  */
 function runV3OnListing(
   listing: ScrapedListing,
   bydel: Bydel | null,
   avmPrediction: AvmPrediction | undefined,
+  manualFmv: number | null = null,
 ) {
   if (!bydel) return null; // V3 kræver bydel for langtidsleje-rate
 
-  const fmvEstimate = estimateFmv({
-    listPrice: listing.listPrice,
-    kvm: listing.kvm,
-    avmPricePerSqm: avmPrediction?.pricePerSqm ?? null,
-  });
+  const fmvEstimate = manualFmv
+    ? { fmv: manualFmv, source: 'manual' as const }
+    : estimateFmv({
+        listPrice: listing.listPrice,
+        kvm: listing.kvm,
+        avmPricePerSqm: avmPrediction?.pricePerSqm ?? null,
+      });
 
   const ejTotal = listing.monthlyExpense
     ? listing.monthlyExpense * 12
@@ -148,7 +153,11 @@ export async function runScrapeJob(opts: ScrapeRunOptions = {}): Promise<ScrapeR
       const avmPrediction = l.addressId ? avmMap.get(l.addressId) : undefined;
 
       const existing = await db
-        .select({ id: onMarketCandidates.id, status: onMarketCandidates.status })
+        .select({
+          id: onMarketCandidates.id,
+          status: onMarketCandidates.status,
+          manualFmv: onMarketCandidates.manualFmv,
+        })
         .from(onMarketCandidates)
         .where(
           and(
@@ -157,7 +166,9 @@ export async function runScrapeJob(opts: ScrapeRunOptions = {}): Promise<ScrapeR
           ),
         );
 
-      const v3 = runV3OnListing(l, bydel, avmPrediction);
+      // Hvis brugeren har sat en manuel FMV, vinder den over AVM ved genberegning.
+      const manualFmv = existing[0]?.manualFmv ?? null;
+      const v3 = runV3OnListing(l, bydel, avmPrediction, manualFmv);
 
       const values = {
         source: 'boligsiden',

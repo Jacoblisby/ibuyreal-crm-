@@ -34,6 +34,7 @@ const REVIEW_COLOR: Record<Review, string> = {
 interface InputState {
   // Pris (de største håndtag)
   fmv: string;
+  fmvNote: string; // valgfri note hvis FMV gemmes manuelt
   tilbudPris: string;
   // Ejerudgifter (kr/år)
   ejSkat: string;
@@ -52,12 +53,15 @@ interface InputState {
 
 function buildInitialInputs(c: OnMarketCandidate): InputState {
   const yearlyFaelles = c.monthlyExpense ? Math.round(c.monthlyExpense * 12) : 0;
-  // Brug iBuyReal AVM som default FMV hvis tilgængelig, ellers fallback til listPrice
-  const defaultFmv = c.v3FmvSource === 'ibuyreal-avm' && c.v3Fmv
+  // FMV-prioritet: manual > AVM > listPris fallback
+  const defaultFmv = c.manualFmv
+    ? Math.round(c.manualFmv)
+    : c.v3FmvSource === 'ibuyreal-avm' && c.v3Fmv
     ? Math.round(c.v3Fmv)
     : (c.listPrice ?? 0);
   return {
     fmv: String(defaultFmv),
+    fmvNote: c.manualFmvNote ?? '',
     tilbudPris: String(c.listPrice ?? 0),
     ejSkat: '0',
     ejGrundskyld: '0',
@@ -80,6 +84,13 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
 
   const initialInputs = useMemo(() => buildInitialInputs(c), [c]);
   const [form, setForm] = useState<InputState>(initialInputs);
+
+  // Er FMV-feltet ændret fra det gemte? (sammenlign med initialInputs.fmv)
+  const fmvIsDirty = useMemo(() => {
+    const current = Number(form.fmv);
+    const saved = Number(initialInputs.fmv);
+    return Number.isFinite(current) && Number.isFinite(saved) && Math.abs(current - saved) >= 1;
+  }, [form.fmv, initialInputs.fmv]);
 
   const bydel = (c.bydel ?? 'indre-by') as Bydel;
 
@@ -177,6 +188,61 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
     setForm((p) => ({ ...p, [key]: value }));
   }
 
+  async function saveManualFmv() {
+    const fmvNum = Number(form.fmv);
+    if (!Number.isFinite(fmvNum) || fmvNum <= 0) {
+      toast.error('Indtast en gyldig FMV-værdi');
+      return;
+    }
+    setBusy(true);
+    const t = toast.loading('Gemmer manuel FMV…');
+    try {
+      const r = await fetch(`/api/on-market/${c.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          manualFmv: fmvNum,
+          manualFmvNote: form.fmvNote || null,
+        }),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        throw new Error(err.error ?? 'Kunne ikke gemme');
+      }
+      const updated = (await r.json()) as OnMarketCandidate;
+      setC(updated);
+      toast.success(`FMV gemt: ${formatKr(fmvNum)}`, { id: t });
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Fejl', { id: t });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function clearManualFmv() {
+    setBusy(true);
+    const t = toast.loading('Fjerner manuel FMV…');
+    try {
+      const r = await fetch(`/api/on-market/${c.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manualFmv: null, manualFmvNote: null }),
+      });
+      if (!r.ok) throw new Error('Kunne ikke fjerne');
+      const updated = (await r.json()) as OnMarketCandidate;
+      setC(updated);
+      // Reset form til ny default
+      setForm(buildInitialInputs(updated));
+      toast.success('Manuel FMV fjernet — bruger AVM/listPris igen', { id: t });
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Fejl', { id: t });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function setReview(rs: Review) {
     setBusy(true);
     // Optimistic update — UI svarer instantly
@@ -225,8 +291,22 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
 
   return (
     <div className="space-y-4">
-      {/* AVM-status banner */}
-      {c.v3FmvSource === 'ibuyreal-avm' ? (
+      {/* FMV-status banner */}
+      {c.v3FmvSource === 'manual' ? (
+        <div className="flex items-center gap-3 rounded-lg border border-blue-200/70 bg-gradient-to-r from-blue-50 to-white px-4 py-2.5 text-xs text-blue-900 shadow-sm">
+          <svg className="h-4 w-4 shrink-0 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 20h9" />
+            <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+          </svg>
+          <div>
+            <span className="font-semibold">FMV sat manuelt</span>
+            <span className="ml-1.5 text-blue-800/80">
+              · {formatKr(c.v3Fmv)}
+              {c.manualFmvNote && ` — "${c.manualFmvNote}"`}
+            </span>
+          </div>
+        </div>
+      ) : c.v3FmvSource === 'ibuyreal-avm' ? (
         <div className="flex items-center gap-3 rounded-lg border border-emerald-200/70 bg-gradient-to-r from-emerald-50 to-white px-4 py-2.5 text-xs text-emerald-900 shadow-sm">
           <svg className="h-4 w-4 shrink-0 text-emerald-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="20 6 9 17 4 12" />
@@ -250,7 +330,7 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
           <div>
             <span className="font-semibold">FMV = listPris (fallback)</span>
             <span className="ml-1.5 text-amber-800/80">
-              · iBuyReal AVM kender ikke denne adresse. Justér FMV manuelt herover hvis du har et bedre skøn.
+              · iBuyReal AVM kender ikke denne adresse. Justér FMV i feltet nedenfor og klik "Gem som manuel FMV" for at låse din vurdering ind.
             </span>
           </div>
         </div>
@@ -398,9 +478,26 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
 
         {/* Pris */}
         <div className="mb-3">
-          <div className="mb-1.5 text-xs font-medium uppercase tracking-wide text-slate-400">Pris</div>
+          <div className="mb-1.5 flex items-center justify-between">
+            <div className="text-xs font-medium uppercase tracking-wide text-slate-400">Pris</div>
+            {c.manualFmv && (
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700">
+                <svg className="h-2.5 w-2.5" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="6" /></svg>
+                Manuel FMV aktiv
+              </div>
+            )}
+          </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Field label="FMV (kr)" hint="iBuyReal AVM-værdi">
+            <Field
+              label="FMV (kr)"
+              hint={
+                c.manualFmv
+                  ? 'manuelt sat'
+                  : c.v3FmvSource === 'ibuyreal-avm'
+                  ? 'iBuyReal AVM'
+                  : 'listPris fallback'
+              }
+            >
               <input
                 type="number"
                 value={form.fmv}
@@ -417,6 +514,45 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
               />
             </Field>
           </div>
+          {/* FMV save-bar — vises kun hvis FMV-værdien afviger fra det gemte */}
+          {fmvIsDirty && (
+            <div className="mt-2.5 flex flex-wrap items-center gap-2 rounded-md border border-blue-200 bg-blue-50/60 p-2">
+              <input
+                type="text"
+                placeholder="Note (valgfri) — fx hvorfor AVM ikke kan bruges"
+                value={form.fmvNote}
+                onChange={(e) => update('fmvNote', e.target.value)}
+                className="form-input flex-1 min-w-[200px] !bg-white"
+              />
+              <button
+                onClick={saveManualFmv}
+                disabled={busy}
+                className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition-[transform,background-color] duration-150 ease-[var(--ease-out)] hover:bg-slate-800 active:scale-[0.97] disabled:opacity-60"
+              >
+                Gem som manuel FMV
+              </button>
+            </div>
+          )}
+          {c.manualFmv && !fmvIsDirty && (
+            <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
+              <div>
+                Manuel FMV: <strong className="font-medium text-slate-900">{formatKr(c.manualFmv)}</strong>
+                {c.manualFmvNote && <span className="ml-2 text-slate-500">— "{c.manualFmvNote}"</span>}
+                {c.manualFmvSetAt && (
+                  <span className="ml-2 text-slate-400">
+                    sat {new Date(c.manualFmvSetAt).toLocaleDateString('da-DK')}
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={clearManualFmv}
+                disabled={busy}
+                className="rounded-md px-2 py-1 text-xs text-slate-500 transition-colors duration-150 ease-[var(--ease-out)] hover:bg-slate-100 hover:text-rose-600 active:scale-[0.97]"
+              >
+                Fjern manuel FMV
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Ejerudgifter */}
@@ -570,10 +706,22 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
               sub="(FMV − investeret) / investeret"
             />
             <Kpi
-              label="iBuyReal AVM"
+              label={c.v3FmvSource === 'manual' ? 'FMV (manuel)' : 'iBuyReal AVM'}
               value={formatKr(live.fmv)}
-              sub={c.v3FmvSource === 'ibuyreal-avm' ? 'XGBoost prediction' : 'listPris fallback'}
-              accent={c.v3FmvSource === 'ibuyreal-avm' ? 'emerald' : undefined}
+              sub={
+                c.v3FmvSource === 'manual'
+                  ? 'manuelt sat værdi'
+                  : c.v3FmvSource === 'ibuyreal-avm'
+                  ? 'XGBoost prediction'
+                  : 'listPris fallback'
+              }
+              accent={
+                c.v3FmvSource === 'manual'
+                  ? 'emerald'
+                  : c.v3FmvSource === 'ibuyreal-avm'
+                  ? 'emerald'
+                  : undefined
+              }
             />
             <Kpi label="Investeret" value={formatKr(live.calc.investeret)} sub="tilbudspris + tx" />
             <Kpi

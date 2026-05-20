@@ -271,6 +271,12 @@ export const onMarketCandidates = pgTable(
     avmPricePerSqm: doublePrecision('avm_price_per_sqm'),
     avmCalculatedAt: timestamp('avm_calculated_at', { withTimezone: true }),
 
+    // Manuel FMV override — bruges når AVM ikke kan predicte for adressen
+    // (fx pre-1850 bygninger). Hvis sat, overskriver AVM/listPris i V3-beregning.
+    manualFmv: doublePrecision('manual_fmv'),
+    manualFmvNote: text('manual_fmv_note'),
+    manualFmvSetAt: timestamp('manual_fmv_set_at', { withTimezone: true }),
+
     // V3-screening cache — kører calculateProperty() med:
     //   FMV = iBuyReal AVM (predicted_price_per_sqm × kvm) eller listPrice som fallback
     //   ejTotal = monthlyExpense * 12

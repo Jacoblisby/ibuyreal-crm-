@@ -50,6 +50,13 @@
       "when": 1779361831347,
       "tag": "0006_abnormal_sage",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1779362993500,
+      "tag": "0007_chilly_hulk",
+      "breakpoints": true
     }
   ]
 }

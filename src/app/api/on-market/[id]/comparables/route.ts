@@ -221,6 +221,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         amount: externalSales.amount,
         kvm: externalSales.kvm,
         perAreaPrice: externalSales.perAreaPrice,
+        yearBuilt: externalSales.yearBuilt,
         postalCode: externalSales.postalCode,
       })
       .from(externalSales)
@@ -235,6 +236,18 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     const out: CompSale[] = [];
     for (const r of rows) {
       if (!r.kvm || r.kvm <= 0 || !r.amount) continue;
+
+      // HARD FILTER: byggeår ±25 år (samme som for internal historicalSales).
+      // Hvis Resight har et byggeår OG vi har subject's, så enforce.
+      // Hvis Resight ikke har byggeår, accepter (data-mangel skal ikke straffe).
+      if (
+        subjectYear &&
+        r.yearBuilt &&
+        Math.abs(r.yearBuilt - subjectYear) > yearBuiltTolerance
+      ) {
+        continue;
+      }
+
       const ppm = r.perAreaPrice ?? r.amount / r.kvm;
       if (ppm < 5_000) continue; // sanity floor
 
@@ -258,14 +271,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         perAreaPrice: Math.round(ppm),
         address: r.address,
         kvm: r.kvm,
-        yearBuilt: null, // Resight har ikke byggeår på handlen
+        yearBuilt: r.yearBuilt,
         postalCode: r.postalCode,
         isSelf: false,
         ageMonths: Math.round(ageMonths * 10) / 10,
         vsList: subjectListPpm ? (ppm - subjectListPpm) / subjectListPpm : null,
         vsFmv: subjectFmvPpm ? (ppm - subjectFmvPpm) / subjectFmvPpm : null,
-        // Resight-handler: ingen byggeår → similarity uden year-component
-        similarity: similarity({ kvm: r.kvm, yearBuilt: null, postalCode: r.postalCode }, r.saleDate),
+        similarity: similarity({ kvm: r.kvm, yearBuilt: r.yearBuilt, postalCode: r.postalCode }, r.saleDate),
         thesisCategory,
         source: 'resight',
       });

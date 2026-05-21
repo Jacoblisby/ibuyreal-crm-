@@ -147,6 +147,7 @@ export interface ExternalSaleLite {
   amount: number;
   kvm: number | null;
   perAreaPrice: number | null;
+  yearBuilt: number | null;
   postalCode: string;
 }
 
@@ -199,20 +200,20 @@ export function computeStrongFreshCompMap(
     // 1) Internal — fra findStrongFreshComps
     let count = findStrongFreshComps(c, candidates, opts).length;
 
-    // 2) External (Resight) — samme postnr + kvm-bånd + ppm ≥ udbud
-    //    (Vi har ikke byggeår på Resight-handler, så vi skipper det filter.)
+    // 2) External (Resight) — samme postnr + kvm-bånd + byggeår ±25 år + ppm ≥ udbud
     const extInPostnr = extByPostnr.get(c.postalCode) ?? [];
     for (const e of extInPostnr) {
       if (e.kvm! < kvmMin || e.kvm! > kvmMax) continue;
+      // HARD FILTER: byggeår ±25 år (samme som internal). Mangler byggeår → accept.
+      if (c.yearBuilt && e.yearBuilt && Math.abs(e.yearBuilt - c.yearBuilt) > yearTol) {
+        continue;
+      }
       const ppm = e.perAreaPrice ?? e.amount / e.kvm!;
       if (ppm < requiredPpm) continue;
       // Skip subject's egen historik — dedup-heuristik på adresse
       const cleanCand = c.address.toLowerCase().replace(/\s+/g, '');
       const cleanExt = e.address.toLowerCase().replace(/\s+/g, '');
       if (cleanExt.startsWith(cleanCand.slice(0, Math.min(15, cleanCand.length)))) continue;
-      // Hvis yearTol skal håndhæves: vi har ikke yearBuilt på Resight,
-      // så vi tæller alle der opfylder kvm+postnr+ppm. Kan strammes senere.
-      void yearTol; // dokumenteret ikke-brug
       count++;
     }
 

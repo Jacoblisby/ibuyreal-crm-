@@ -293,6 +293,22 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
 
   return (
     <div className="space-y-4">
+      {/* Pitch-link — én klik til investor-pitch undersiden */}
+      <div className="flex items-center justify-end">
+        <a
+          href={`/on-market/${c.id}/pitch`}
+          className="group inline-flex items-center gap-2 rounded-md border border-emerald-200/80 bg-gradient-to-r from-emerald-50 to-white px-3 py-1.5 text-xs font-medium text-emerald-800 shadow-sm transition-[transform,box-shadow] duration-150 ease-[var(--ease-out)] hover:shadow-md active:scale-[0.97]"
+        >
+          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 2 2 7l10 5 10-5-10-5z" />
+            <path d="m2 17 10 5 10-5" />
+            <path d="m2 12 10 5 10-5" />
+          </svg>
+          Åbn pitch-view
+          <span className="text-emerald-500 transition-transform duration-150 ease-[var(--ease-out)] group-hover:translate-x-0.5" aria-hidden="true">→</span>
+        </a>
+      </div>
+
       {/* JP Morgan-grade hero: curated score + rationale + red flags */}
       <CuratedHero score={score} />
 

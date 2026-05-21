@@ -1,0 +1,1 @@
+ALTER TABLE "external_sales" ADD COLUMN "year_built" integer;

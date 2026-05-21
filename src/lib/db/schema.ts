@@ -353,6 +353,8 @@ export const externalSales = pgTable(
     kvm: integer('kvm'),
     /** Pris pr. m² (enhedsareal) — fra Resight */
     perAreaPrice: doublePrecision('per_area_price'),
+    /** Opførselsår fra Ejendomme-sheet (joined på Handels-ID) */
+    yearBuilt: integer('year_built'),
     postalCode: text('postal_code').notNull(),
     municipalityCode: integer('municipality_code'),
     /** Resight handelstype: 'Private handler', 'Familiehandler' etc. */

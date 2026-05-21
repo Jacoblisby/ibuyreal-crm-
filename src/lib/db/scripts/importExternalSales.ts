@@ -16,6 +16,7 @@
  *   - Skal have valid Handelsdato + Pris + Enhedsareal > 0
  */
 import { drizzle } from 'drizzle-orm/postgres-js';
+import { sql } from 'drizzle-orm';
 import postgres from 'postgres';
 import * as XLSX from 'xlsx';
 import path from 'node:path';
@@ -37,7 +38,23 @@ interface ResightRow {
   'Mægler firma': string | null;
 }
 
-function normalizeRow(r: ResightRow, batch: string): NewExternalSale | null {
+interface EjendommeRow {
+  'Handels-ID': string;
+  'Opførelsesår': number | string | null;
+}
+
+function parseYear(v: number | string | null | undefined): number | null {
+  if (v == null || v === '-' || v === '') return null;
+  const n = typeof v === 'number' ? v : parseInt(String(v), 10);
+  if (!Number.isFinite(n) || n < 1700 || n > 2100) return null;
+  return n;
+}
+
+function normalizeRow(
+  r: ResightRow,
+  yearByHandelsId: Map<string, number>,
+  batch: string,
+): NewExternalSale | null {
   if (!r['Handels-ID'] || !r['Handelsnavn']) return null;
   if (!r['Handelsdato']) return null;
   if (!r['Pris'] || r['Pris'] < 100_000) return null;
@@ -62,6 +79,7 @@ function normalizeRow(r: ResightRow, batch: string): NewExternalSale | null {
     amount: r['Pris'],
     kvm,
     perAreaPrice: ppm,
+    yearBuilt: yearByHandelsId.get(r['Handels-ID']) ?? null,
     postalCode: String(r['Postnr']),
     municipalityCode: r['Kommunekode'] ?? null,
     handelstype: r['Handelstype'] ?? null,
@@ -85,8 +103,8 @@ async function main() {
     process.exit(1);
   }
 
-  const sql = postgres(url, { max: 4 });
-  const db = drizzle(sql);
+  const pg = postgres(url, { max: 4 });
+  const db = drizzle(pg);
 
   const batch = `import-${new Date().toISOString().slice(0, 19)}`;
   let totalRead = 0;
@@ -105,23 +123,52 @@ async function main() {
     const rows = XLSX.utils.sheet_to_json<ResightRow>(sheet, { defval: null });
     totalRead += rows.length;
 
+    // Build byggeår-lookup fra Ejendomme-sheet (joined på Handels-ID)
+    const yearByHandelsId = new Map<string, number>();
+    const ejendommeSheet = wb.Sheets['Ejendomme'];
+    if (ejendommeSheet) {
+      const ejRows = XLSX.utils.sheet_to_json<EjendommeRow>(ejendommeSheet, { defval: null });
+      for (const er of ejRows) {
+        const yr = parseYear(er['Opførelsesår']);
+        if (er['Handels-ID'] && yr) yearByHandelsId.set(er['Handels-ID'], yr);
+      }
+      console.log(`  byggeår-lookup: ${yearByHandelsId.size} af ${ejRows.length} ejendomme har valid Opførelsesår`);
+    } else {
+      console.warn('  ⚠ ingen "Ejendomme"-sheet — byggeår vil være null');
+    }
+
     const normalized: NewExternalSale[] = [];
     for (const r of rows) {
-      const n = normalizeRow(r, batch);
+      const n = normalizeRow(r, yearByHandelsId, batch);
       if (n) normalized.push(n);
       else totalSkipped++;
     }
 
     console.log(`  ${rows.length} rows read, ${normalized.length} valid, ${rows.length - normalized.length} skipped`);
 
-    // Batch insert (250 ad gangen — postgres parameter limit)
+    // Batch upsert (250 ad gangen — postgres parameter limit).
+    // ON CONFLICT DO UPDATE så re-import overskriver f.eks. nytilkomne yearBuilt
+    // eller rettede priser uden at miste data.
     const BATCH = 250;
     for (let i = 0; i < normalized.length; i += BATCH) {
       const chunk = normalized.slice(i, i + BATCH);
       const result = await db
         .insert(externalSales)
         .values(chunk)
-        .onConflictDoNothing({ target: externalSales.handelsId })
+        .onConflictDoUpdate({
+          target: externalSales.handelsId,
+          set: {
+            yearBuilt: sql`EXCLUDED.year_built`,
+            kvm: sql`EXCLUDED.kvm`,
+            perAreaPrice: sql`EXCLUDED.per_area_price`,
+            amount: sql`EXCLUDED.amount`,
+            address: sql`EXCLUDED.address`,
+            saleDate: sql`EXCLUDED.sale_date`,
+            anvendelse: sql`EXCLUDED.anvendelse`,
+            broker: sql`EXCLUDED.broker`,
+            importBatch: sql`EXCLUDED.import_batch`,
+          },
+        })
         .returning({ id: externalSales.id });
       totalInserted += result.length;
     }
@@ -129,7 +176,7 @@ async function main() {
 
   console.log(`\n✓ Done. Read ${totalRead}, skipped ${totalSkipped}, inserted ${totalInserted} (rest were duplicates).`);
 
-  await sql.end();
+  await pg.end();
 }
 
 main().catch((err) => {

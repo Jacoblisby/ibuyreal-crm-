@@ -29,6 +29,7 @@ export default async function OnMarketPage() {
       amount: externalSales.amount,
       kvm: externalSales.kvm,
       perAreaPrice: externalSales.perAreaPrice,
+      yearBuilt: externalSales.yearBuilt,
       postalCode: externalSales.postalCode,
     })
     .from(externalSales)

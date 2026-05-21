@@ -15,6 +15,7 @@
  */
 import type { OnMarketCandidate } from './db/schema';
 import { isConcreteEra, isGroundFloor, isNoisyStreet } from './quality';
+import { findStrongFreshComps, type StrongFreshComp } from './strongComps';
 
 export interface ScoreComponents {
   avmSignal: number;
@@ -196,27 +197,57 @@ export function curatedScore(c: OnMarketCandidate): CuratedScore {
 /**
  * Curated top-N candidates, sorteret efter total score (desc).
  *
- * Pre-filter:
+ * HARDE pre-filters (case dumper ud helt):
  *   - Status active
  *   - Har AVM eller manuel FMV
  *   - Positiv alpha
- *   - Klarer quality (ikke noisy/stuen/beton)
+ *   - Klarer quality: ikke noisy-gade, ikke stuen/kælder, ikke beton (1950-1990)
+ *   - **≥1 stærk frisk comp**: en nær-peer solgt indenfor 5 mdr OVER vores
+ *     udbudspris/m². Uden bevis fra friske handler droppes casen helt fra
+ *     shortlist — vi vil kun præsentere cases hvor markedet for nyligt har
+ *     valideret prisniveauet.
  */
 export function pickCurated(
   candidates: OnMarketCandidate[],
   n = 20,
-): Array<OnMarketCandidate & { score: CuratedScore }> {
-  const scored = candidates
+  opts?: {
+    strongFreshMinCount?: number;
+    monthsBack?: number;
+    abovePct?: number;
+    /**
+     * Pre-computed strong-fresh-comp count per kandidat-ID (server-side, inkl.
+     * Resight external_sales). Hvis angivet bruges denne i stedet for at
+     * compute fra `candidates` alene — det giver os adgang til ekstern pool
+     * som ikke er i `historicalSales`.
+     */
+    strongFreshMap?: Record<string, number>;
+  },
+): Array<OnMarketCandidate & { score: CuratedScore; strongFreshComps: StrongFreshComp[]; strongFreshCount: number }> {
+  const minCount = opts?.strongFreshMinCount ?? 1;
+  const monthsBack = opts?.monthsBack ?? 5;
+  const abovePct = opts?.abovePct ?? 0;
+  const precomputed = opts?.strongFreshMap;
+
+  // Pool for peer-search = alle aktive (incl. dem der ikke nødvendigvis går videre)
+  const pool = candidates.filter((c) => c.status === 'active');
+
+  const scored = pool
     .filter(
       (c) =>
-        c.status === 'active' &&
         (c.v3FmvSource === 'ibuyreal-avm' || c.v3FmvSource === 'manual') &&
         (c.v3Alpha ?? 0) > 0 &&
         !isNoisyStreet(c.address) &&
         !isGroundFloor(c.address) &&
         !isConcreteEra(c.yearBuilt),
     )
-    .map((c) => ({ ...c, score: curatedScore(c) }));
+    .map((c) => {
+      const strongFreshComps = findStrongFreshComps(c, pool, { monthsBack, abovePct });
+      // Foretræk precomputed count (incl. Resight) hvis tilgængelig
+      const strongFreshCount = precomputed?.[c.id] ?? strongFreshComps.length;
+      return { ...c, score: curatedScore(c), strongFreshComps, strongFreshCount };
+    })
+    .filter((c) => c.strongFreshCount >= minCount);
+
   scored.sort((a, b) => b.score.total - a.score.total);
   return scored.slice(0, n);
 }

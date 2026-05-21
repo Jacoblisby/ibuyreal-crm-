@@ -43,6 +43,13 @@
       "when": 1779301899947,
       "tag": "0005_friendly_venom",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1779361831347,
+      "tag": "0006_abnormal_sage",
+      "breakpoints": true
     }
   ]
 }

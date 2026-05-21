@@ -326,6 +326,54 @@ export const onMarketCandidates = pgTable(
 
 // ─── E. Scrape jobs (audit log) ─────────────────────────────────────────────
 
+/**
+ * External tinglysningsdata fra Resight (eller andre kilder).
+ *
+ * Bruges som ekstra comps-pool ud over `historicalSales` på `on_market_candidates`.
+ * Hvor `historicalSales` kun har handler på adresser vi pt. scraper,
+ * indeholder denne tabel ALLE handler i KBH/Frb — også fra ejendomme
+ * vi ikke aktivt scraper. Det giver markant bedre comp-coverage,
+ * især for friske handler (last 5 months).
+ *
+ * Idempotency: (handelsId) er UNIQUE — samme Resight-handels-ID kan reimporteres
+ * uden duplikater.
+ */
+export const externalSales = pgTable(
+  'external_sales',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** Resight Handels-ID — UNIQUE constraint for idempotent import */
+    handelsId: text('handels_id').notNull().unique(),
+    /** Fuld adresse fra "Handelsnavn", fx "Englandsvej 23, 3. tv, 2300 København S" */
+    address: text('address').notNull(),
+    saleDate: text('sale_date').notNull(),          // YYYY-MM-DD
+    /** Total købspris (kr) */
+    amount: doublePrecision('amount').notNull(),
+    /** Enhedsareal (kvm) */
+    kvm: integer('kvm'),
+    /** Pris pr. m² (enhedsareal) — fra Resight */
+    perAreaPrice: doublePrecision('per_area_price'),
+    postalCode: text('postal_code').notNull(),
+    municipalityCode: integer('municipality_code'),
+    /** Resight handelstype: 'Private handler', 'Familiehandler' etc. */
+    handelstype: text('handelstype'),
+    /** Resight handelsmetode: 'Almindelig fri handel', 'Auktion' etc. */
+    handelsmetode: text('handelsmetode'),
+    /** Resight anvendelse, fx 'Etagebolig-bygning, flerfamiliehus...' */
+    anvendelse: text('anvendelse'),
+    /** Mægler firma — kan bruges til volume-stats */
+    broker: text('broker'),
+    /** Kilde-fil + import-batch så vi kan rulle tilbage */
+    importBatch: text('import_batch'),
+    importedAt: timestamp('imported_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    postalIdx: index('external_sales_postal_idx').on(t.postalCode),
+    dateIdx: index('external_sales_date_idx').on(t.saleDate),
+    addressIdx: index('external_sales_address_idx').on(t.address),
+  }),
+);
+
 export const scrapeJobs = pgTable('scrape_jobs', {
   id: uuid('id').primaryKey().defaultRandom(),
   startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
@@ -348,3 +396,5 @@ export type Investor = typeof investors.$inferSelect;
 export type AntagelserRow = typeof antagelser.$inferSelect;
 export type OnMarketCandidate = typeof onMarketCandidates.$inferSelect;
 export type ScrapeJob = typeof scrapeJobs.$inferSelect;
+export type ExternalSale = typeof externalSales.$inferSelect;
+export type NewExternalSale = typeof externalSales.$inferInsert;

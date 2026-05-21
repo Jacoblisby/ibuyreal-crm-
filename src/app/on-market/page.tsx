@@ -1,7 +1,8 @@
 import { db } from '@/lib/db/client';
-import { onMarketCandidates, scrapeJobs } from '@/lib/db/schema';
-import { desc } from 'drizzle-orm';
+import { externalSales, onMarketCandidates, scrapeJobs } from '@/lib/db/schema';
+import { desc, gte } from 'drizzle-orm';
 import { OnMarketClient } from './on-market-client';
+import { computeStrongFreshCompMap } from '@/lib/strongComps';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'On-market — iBuyReal' };
@@ -13,6 +14,30 @@ export default async function OnMarketPage() {
     .select()
     .from(onMarketCandidates)
     .orderBy(desc(onMarketCandidates.v3AfkastBest));
+
+  // Pre-load Resight-handler de seneste 6 mdr (lille pool — bruges som
+  // ekstra peer-data til strong-fresh-comp gate i Curated 20).
+  // Curation kører client-side; ekstern data er ikke i candidate-row,
+  // så vi pre-computer per-kandidat-tællingen server-side.
+  const cutoff6m = new Date();
+  cutoff6m.setMonth(cutoff6m.getMonth() - 6);
+  const cutoff6mStr = cutoff6m.toISOString().slice(0, 10);
+  const extRows = await db
+    .select({
+      address: externalSales.address,
+      saleDate: externalSales.saleDate,
+      amount: externalSales.amount,
+      kvm: externalSales.kvm,
+      perAreaPrice: externalSales.perAreaPrice,
+      postalCode: externalSales.postalCode,
+    })
+    .from(externalSales)
+    .where(gte(externalSales.saleDate, cutoff6mStr));
+
+  const strongFreshMap = computeStrongFreshCompMap(rows, extRows, {
+    monthsBack: 5,
+    abovePct: 0,
+  });
 
   const [lastJob] = await db
     .select()
@@ -30,7 +55,11 @@ export default async function OnMarketPage() {
           </p>
         </div>
       </div>
-      <OnMarketClient initial={rows} lastJob={lastJob ?? null} />
+      <OnMarketClient
+        initial={rows}
+        lastJob={lastJob ?? null}
+        strongFreshMap={strongFreshMap}
+      />
     </div>
   );
 }

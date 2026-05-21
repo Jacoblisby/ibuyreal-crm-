@@ -1468,8 +1468,12 @@ function ComparablesPanel({
     yearBuilt: number | null;
     postalCode: string;
     isSelf?: boolean;
+    ageMonths: number;
+    vsList: number | null;
+    vsFmv: number | null;
     similarity: number;
     thesisCategory: 'above-list' | 'validating-fmv' | 'reference';
+    source: 'internal' | 'resight';
   }
   interface CompResp {
     subjectKvm: number;
@@ -1482,8 +1486,15 @@ function ComparablesPanel({
     compBasedFmv: number | null;
     strongCompsMedian: number | null;
     strongCompsCount: number;
+    strongCompsTier: '4m' | '6m' | '12m' | '24m' | '4y';
+    strongCompsVsList: number | null;
+    strongCompsVsFmv: number | null;
     aboveListCount: number;
     validatingCount: number;
+    fresh6mCount: number;
+    fresh12mCount: number;
+    externalSalesCount: number;
+    internalSalesCount: number;
     sampleSize: number;
     sales: CompSaleData[];
     strongComps: CompSaleData[];
@@ -1510,7 +1521,7 @@ function ComparablesPanel({
     return (
       <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <h3 className="text-[13px] font-semibold tracking-tight text-slate-900">
-          Sammenlignelige handler (samme postnr, ±25% kvm, 5 år)
+          Sammenlignelige handler (samme postnr, ±30% kvm, byggeår ±25 år, 4 år)
         </h3>
         <p className="mt-2 text-sm text-slate-400">
           Ingen nærlokale handler fundet i vores DB. Udvid scrape-coverage for at få sammenlignelige.
@@ -1518,6 +1529,21 @@ function ComparablesPanel({
       </div>
     );
   }
+
+  const tierLabel: Record<typeof data.strongCompsTier, string> = {
+    '4m': 'sidste 4 mdr',
+    '6m': 'sidste 6 mdr',
+    '12m': 'sidste 12 mdr',
+    '24m': 'sidste 24 mdr',
+    '4y': 'sidste 4 år',
+  };
+  const tierTone: Record<typeof data.strongCompsTier, 'emerald' | 'amber' | 'rose'> = {
+    '4m': 'emerald',
+    '6m': 'emerald',
+    '12m': 'amber',
+    '24m': 'amber',
+    '4y': 'rose',
+  };
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -1530,39 +1556,72 @@ function ComparablesPanel({
           {data.scope === 'postnr'
             ? `Samme postnr ${data.subjectPostal}`
             : `Samme bydel ${data.subjectBydel ?? ''} (postnr for snæver)`}
-          , ±30% kvm, 5 år · n={data.sampleSize}
+          , ±30% kvm, byggeår ±25 år · n={data.sampleSize} (4 år pool · {data.fresh6mCount} sidste 6 mdr · {data.fresh12mCount} sidste 12 mdr) ·{' '}
+          <span className="text-slate-400">
+            {data.internalSalesCount} scrape · {data.externalSalesCount} Resight
+          </span>
         </p>
       </div>
 
-      {/* STRONG COMPS SUMMARY */}
+      {/* STRONG COMPS SUMMARY — fokus på vs udbud + vs vores FMV */}
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <ThesisStat
-          label="Stærke comps"
+          label={`Stærke comps (${tierLabel[data.strongCompsTier]})`}
           value={String(data.strongCompsCount)}
-          sub="similarity ≥40, sidste 3 år"
-          tone={data.strongCompsCount >= 3 ? 'emerald' : data.strongCompsCount > 0 ? 'amber' : 'rose'}
-        />
-        <ThesisStat
-          label="Solgt ≥ udbudspris/m²"
-          value={String(data.aboveListCount)}
-          sub="beviser at udbud er forhandlelig"
-          tone={data.aboveListCount > 0 ? 'emerald' : 'slate'}
-        />
-        <ThesisStat
-          label="Bekræfter AVM ±15%"
-          value={String(data.validatingCount)}
-          sub="solgt nær vores FMV"
-          tone={data.validatingCount > 0 ? 'emerald' : 'slate'}
-        />
-        <ThesisStat
-          label="Median kr/m² (alle)"
-          value={data.medianPerSqm ? formatKr(data.medianPerSqm) : '–'}
           sub={
             data.strongCompsMedian
-              ? `strong median: ${formatKr(data.strongCompsMedian)}/m²`
+              ? `median ${formatKr(data.strongCompsMedian)}/m²`
               : 'ingen strong comps'
           }
-          tone="slate"
+          tone={
+            data.strongCompsCount >= 3
+              ? tierTone[data.strongCompsTier]
+              : data.strongCompsCount > 0
+              ? 'amber'
+              : 'rose'
+          }
+        />
+        <ThesisStat
+          label="Strong vs udbud"
+          value={
+            data.strongCompsVsList !== null
+              ? `${data.strongCompsVsList >= 0 ? '+' : ''}${(data.strongCompsVsList * 100).toFixed(1)}%`
+              : '–'
+          }
+          sub={`udbud ${formatKr(data.subjectListPpm)}/m²`}
+          tone={
+            data.strongCompsVsList === null
+              ? 'slate'
+              : data.strongCompsVsList >= 0
+              ? 'emerald'
+              : data.strongCompsVsList >= -0.05
+              ? 'amber'
+              : 'rose'
+          }
+        />
+        <ThesisStat
+          label="Strong vs vores FMV"
+          value={
+            data.strongCompsVsFmv !== null
+              ? `${data.strongCompsVsFmv >= 0 ? '+' : ''}${(data.strongCompsVsFmv * 100).toFixed(1)}%`
+              : '–'
+          }
+          sub={`FMV ${formatKr(data.subjectFmvPpm)}/m²`}
+          tone={
+            data.strongCompsVsFmv === null
+              ? 'slate'
+              : Math.abs(data.strongCompsVsFmv) <= 0.08
+              ? 'emerald'
+              : Math.abs(data.strongCompsVsFmv) <= 0.15
+              ? 'amber'
+              : 'rose'
+          }
+        />
+        <ThesisStat
+          label="Solgt ≥ udbud / nær FMV"
+          value={`${data.aboveListCount} / ${data.validatingCount}`}
+          sub="hits i hele 4-års pool"
+          tone={data.aboveListCount > 0 || data.validatingCount > 0 ? 'emerald' : 'slate'}
         />
       </div>
 
@@ -1579,12 +1638,13 @@ function ComparablesPanel({
             <thead className="text-left text-[10px] font-medium uppercase tracking-wider text-emerald-700/70">
               <tr>
                 <th className="px-2 py-1">Dato</th>
+                <th className="px-2 py-1 text-right" title="måneder siden handlen">Alder</th>
                 <th className="px-2 py-1">Adresse</th>
                 <th className="px-2 py-1 text-right">kvm</th>
                 <th className="px-2 py-1 text-right">Bygget</th>
-                <th className="px-2 py-1 text-right">Pris</th>
                 <th className="px-2 py-1 text-right">kr/m²</th>
-                <th className="px-2 py-1 text-right" title="similarity-score 0-100">Sim</th>
+                <th className="px-2 py-1 text-right" title="vs vores udbudspris/m²">vs udbud</th>
+                <th className="px-2 py-1 text-right" title="vs vores FMV/m²">vs FMV</th>
                 <th className="px-2 py-1">Kategori</th>
               </tr>
             </thead>
@@ -1592,12 +1652,64 @@ function ComparablesPanel({
               {data.strongComps.map((s, i) => (
                 <tr key={i} className="border-t border-emerald-100/80">
                   <td className="px-2 py-1.5 tabular-nums text-slate-700">{s.date}</td>
-                  <td className="px-2 py-1.5 font-medium text-slate-900">{s.address}</td>
+                  <td
+                    className={
+                      'px-2 py-1.5 text-right tabular-nums text-xs ' +
+                      (s.ageMonths <= 6
+                        ? 'font-semibold text-emerald-700'
+                        : s.ageMonths <= 12
+                        ? 'text-emerald-600'
+                        : s.ageMonths <= 24
+                        ? 'text-amber-600'
+                        : 'text-slate-500')
+                    }
+                  >
+                    {s.ageMonths < 12
+                      ? `${s.ageMonths.toFixed(1)} mdr`
+                      : `${(s.ageMonths / 12).toFixed(1)} år`}
+                  </td>
+                  <td className="px-2 py-1.5 font-medium text-slate-900">
+                    {s.address}
+                    {s.source === 'resight' && (
+                      <span
+                        title="Resight tinglysningsdata (ekstern)"
+                        className="ml-1.5 inline-block rounded bg-violet-100 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-violet-700"
+                      >
+                        R
+                      </span>
+                    )}
+                  </td>
                   <td className="px-2 py-1.5 text-right tabular-nums">{s.kvm}</td>
                   <td className="px-2 py-1.5 text-right tabular-nums text-xs text-slate-500">{s.yearBuilt ?? '–'}</td>
-                  <td className="px-2 py-1.5 text-right tabular-nums">{formatKr(s.amount)}</td>
                   <td className="px-2 py-1.5 text-right tabular-nums font-semibold text-emerald-700">{formatKr(s.perAreaPrice)}</td>
-                  <td className="px-2 py-1.5 text-right tabular-nums text-xs text-slate-500">{s.similarity}</td>
+                  <td
+                    className={
+                      'px-2 py-1.5 text-right tabular-nums text-xs font-medium ' +
+                      (s.vsList === null
+                        ? 'text-slate-400'
+                        : s.vsList >= 0
+                        ? 'text-emerald-700'
+                        : s.vsList >= -0.05
+                        ? 'text-amber-600'
+                        : 'text-rose-600')
+                    }
+                  >
+                    {s.vsList !== null ? `${s.vsList >= 0 ? '+' : ''}${(s.vsList * 100).toFixed(1)}%` : '–'}
+                  </td>
+                  <td
+                    className={
+                      'px-2 py-1.5 text-right tabular-nums text-xs font-medium ' +
+                      (s.vsFmv === null
+                        ? 'text-slate-400'
+                        : Math.abs(s.vsFmv) <= 0.08
+                        ? 'text-emerald-700'
+                        : Math.abs(s.vsFmv) <= 0.15
+                        ? 'text-amber-600'
+                        : 'text-rose-600')
+                    }
+                  >
+                    {s.vsFmv !== null ? `${s.vsFmv >= 0 ? '+' : ''}${(s.vsFmv * 100).toFixed(1)}%` : '–'}
+                  </td>
                   <td className="px-2 py-1.5">
                     <span
                       className={
@@ -1626,11 +1738,12 @@ function ComparablesPanel({
           <thead className="bg-slate-50/50 text-left text-[11px] font-medium uppercase tracking-wider text-slate-500">
             <tr>
               <th className="px-3 py-2">Dato</th>
+              <th className="px-3 py-2 text-right" title="måneder siden handlen">Alder</th>
               <th className="px-3 py-2">Adresse</th>
               <th className="px-3 py-2 text-right">kvm</th>
               <th className="px-3 py-2 text-right">Bygget</th>
-              <th className="px-3 py-2 text-right">Pris</th>
               <th className="px-3 py-2 text-right">kr/m²</th>
+              <th className="px-3 py-2 text-right" title="vs vores udbudspris/m²">vs udbud</th>
               <th className="px-3 py-2 text-right">Sim</th>
             </tr>
           </thead>
@@ -1650,6 +1763,22 @@ function ComparablesPanel({
                 }
               >
                 <td className="px-3 py-2 tabular-nums text-slate-600">{s.date}</td>
+                <td
+                  className={
+                    'px-3 py-2 text-right tabular-nums text-xs ' +
+                    (s.ageMonths <= 6
+                      ? 'font-semibold text-emerald-700'
+                      : s.ageMonths <= 12
+                      ? 'text-emerald-600'
+                      : s.ageMonths <= 24
+                      ? 'text-amber-600'
+                      : 'text-slate-500')
+                  }
+                >
+                  {s.ageMonths < 12
+                    ? `${s.ageMonths.toFixed(1)} mdr`
+                    : `${(s.ageMonths / 12).toFixed(1)} år`}
+                </td>
                 <td className="px-3 py-2 font-medium text-slate-900">
                   {s.address}
                   {s.isSelf && (
@@ -1657,12 +1786,19 @@ function ComparablesPanel({
                       denne case
                     </span>
                   )}
+                  {s.source === 'resight' && (
+                    <span
+                      title="Resight tinglysningsdata (ekstern)"
+                      className="ml-1.5 inline-block rounded bg-violet-100 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-violet-700"
+                    >
+                      R
+                    </span>
+                  )}
                 </td>
                 <td className="px-3 py-2 text-right tabular-nums">{s.kvm}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-xs text-slate-500">
                   {s.yearBuilt ?? '–'}
                 </td>
-                <td className="px-3 py-2 text-right tabular-nums">{formatKr(s.amount)}</td>
                 <td
                   className={
                     'px-3 py-2 text-right tabular-nums font-medium ' +
@@ -1674,6 +1810,20 @@ function ComparablesPanel({
                   }
                 >
                   {formatKr(s.perAreaPrice)}
+                </td>
+                <td
+                  className={
+                    'px-3 py-2 text-right tabular-nums text-xs font-medium ' +
+                    (s.vsList === null
+                      ? 'text-slate-400'
+                      : s.vsList >= 0
+                      ? 'text-emerald-700'
+                      : s.vsList >= -0.05
+                      ? 'text-amber-600'
+                      : 'text-rose-600')
+                  }
+                >
+                  {s.vsList !== null ? `${s.vsList >= 0 ? '+' : ''}${(s.vsList * 100).toFixed(1)}%` : '–'}
                 </td>
                 <td className="px-3 py-2 text-right tabular-nums text-xs text-slate-500">{s.similarity}</td>
               </tr>

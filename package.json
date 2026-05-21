@@ -13,7 +13,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "db:seed": "tsx --env-file=.env.local src/lib/db/seed.ts"
+    "db:seed": "tsx --env-file=.env.local src/lib/db/seed.ts",
+    "db:import-external-sales": "tsx --env-file=.env.local src/lib/db/scripts/importExternalSales.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.2",

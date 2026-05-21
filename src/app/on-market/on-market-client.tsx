@@ -55,7 +55,8 @@ const PRESET_LABEL: Record<Preset, { label: string; desc: string }> = {
   all: { label: 'Alle', desc: 'Vis alle aktive listings' },
   curated: {
     label: 'Curated 20',
-    desc: 'Composite-score: AVM signal + kvalitet + data-freshness + bydel + market signals',
+    desc:
+      'Hard gate: ≥1 frisk comp (sidste 5 mdr) solgt ≥ udbud/m² (vores scrape + Resight tinglysningsdata) · ikke stueetage · ikke 1950-1990 · ikke støjstreets · positiv α · AVM eller manuel FMV. Rangering: composite-score 0-100.',
   },
   core: {
     label: 'Core picks',
@@ -68,9 +69,12 @@ const PRESET_LABEL: Record<Preset, { label: string; desc: string }> = {
 export function OnMarketClient({
   initial,
   lastJob,
+  strongFreshMap: strongFreshMapServer,
 }: {
   initial: OnMarketCandidate[];
   lastJob: ScrapeJob | null;
+  /** Pre-computed server-side: count af strong-fresh-comps (incl. Resight) per kandidat-ID */
+  strongFreshMap?: Record<string, number>;
 }) {
   const router = useRouter();
   const [rows] = useState(initial);
@@ -90,8 +94,16 @@ export function OnMarketClient({
     (x.v3Alpha ?? 0) < 0.3 &&
     passesQualityFilter({ address: x.address, yearBuilt: x.yearBuilt });
 
-  const curatedTop20 = useMemo(() => pickCurated(activeRows, 20), [activeRows]);
+  const curatedTop20 = useMemo(
+    () => pickCurated(activeRows, 20, { strongFreshMap: strongFreshMapServer }),
+    [activeRows, strongFreshMapServer],
+  );
   const curatedIds = useMemo(() => new Set(curatedTop20.map((x) => x.id)), [curatedTop20]);
+  const strongFreshMap = useMemo(() => {
+    const m = new Map<string, number>();
+    curatedTop20.forEach((x) => m.set(x.id, x.strongFreshCount));
+    return m;
+  }, [curatedTop20]);
   const scoreMap = useMemo(() => {
     const m = new Map<string, ReturnType<typeof curatedScore>>();
     activeRows.forEach((x) => m.set(x.id, curatedScore(x)));
@@ -414,9 +426,14 @@ export function OnMarketClient({
           <thead className="border-b border-slate-200 bg-slate-50/80 text-left text-[11px] font-medium uppercase tracking-wider text-slate-500">
             <tr>
               {s.preset === 'curated' && (
-                <th className="px-3 py-2.5 text-right" title="Curated score 0-100 baseret på AVM, kvalitet, data-freshness, bydel, market signals">
-                  Score
-                </th>
+                <>
+                  <th className="px-3 py-2.5 text-right" title="Curated score 0-100 baseret på AVM, kvalitet, data-freshness, bydel, market signals">
+                    Score
+                  </th>
+                  <th className="px-3 py-2.5 text-right" title="Antal handler i nær-området sidste 5 mdr solgt ≥ vores udbudspris/m². Hard gate: ≥1 påkrævet for at komme på listen.">
+                    Friske comps
+                  </th>
+                </>
               )}
               <th className="px-3 py-2.5">Adresse</th>
               <th className="px-3 py-2.5">Bydel</th>
@@ -445,26 +462,48 @@ export function OnMarketClient({
                   style={{ animationDelay: `${Math.min(idx, 12) * 25}ms` }}
                 >
                   {s.preset === 'curated' && (
-                    <td className="px-3 py-2.5 text-right">
-                      <div
-                        className="inline-flex flex-col items-end"
-                        title={(scoreMap.get(r.id)?.rationale ?? []).join('\n') + '\n\n' + (scoreMap.get(r.id)?.redFlags.map((f) => '⚠ ' + f).join('\n') ?? '')}
-                      >
-                        <span
-                          className={
-                            'tabular-nums text-base font-bold ' +
-                            ((scoreMap.get(r.id)?.total ?? 0) >= 70
-                              ? 'text-emerald-700'
-                              : (scoreMap.get(r.id)?.total ?? 0) >= 55
-                              ? 'text-slate-900'
-                              : 'text-slate-500')
-                          }
+                    <>
+                      <td className="px-3 py-2.5 text-right">
+                        <div
+                          className="inline-flex flex-col items-end"
+                          title={(scoreMap.get(r.id)?.rationale ?? []).join('\n') + '\n\n' + (scoreMap.get(r.id)?.redFlags.map((f) => '⚠ ' + f).join('\n') ?? '')}
                         >
-                          {scoreMap.get(r.id)?.total ?? '–'}
-                        </span>
-                        <span className="text-[10px] text-slate-400">#{idx + 1}</span>
-                      </div>
-                    </td>
+                          <span
+                            className={
+                              'tabular-nums text-base font-bold ' +
+                              ((scoreMap.get(r.id)?.total ?? 0) >= 70
+                                ? 'text-emerald-700'
+                                : (scoreMap.get(r.id)?.total ?? 0) >= 55
+                                ? 'text-slate-900'
+                                : 'text-slate-500')
+                            }
+                          >
+                            {scoreMap.get(r.id)?.total ?? '–'}
+                          </span>
+                          <span className="text-[10px] text-slate-400">#{idx + 1}</span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        {(() => {
+                          const count = strongFreshMap.get(r.id) ?? 0;
+                          return (
+                            <span
+                              className={
+                                'inline-block min-w-[28px] rounded-md px-2 py-0.5 text-center tabular-nums text-sm font-semibold ' +
+                                (count >= 3
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : count >= 1
+                                  ? 'bg-emerald-50 text-emerald-700'
+                                  : 'bg-rose-50 text-rose-700')
+                              }
+                              title={`${count} handel${count === 1 ? '' : 'er'} sidste 5 mdr ≥ vores udbudspris/m²`}
+                            >
+                              {count}
+                            </span>
+                          );
+                        })()}
+                      </td>
+                    </>
                   )}
                   <td className="px-3 py-2.5 font-medium text-slate-900">
                     <a
@@ -578,7 +617,7 @@ export function OnMarketClient({
             })}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={s.preset === 'curated' ? 15 : 14} className="px-3 py-16">
+                <td colSpan={s.preset === 'curated' ? 16 : 14} className="px-3 py-16">
                   <div className="mx-auto flex max-w-sm flex-col items-center gap-3 text-center">
                     <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
                       <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

@@ -13,9 +13,9 @@
  *   - lokalitet (samme postnr +10, samme bydel +5)
  */
 import { NextResponse } from 'next/server';
-import { and, eq, isNotNull, sql } from 'drizzle-orm';
+import { and, eq, gte, isNotNull, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
-import { onMarketCandidates } from '@/lib/db/schema';
+import { externalSales, onMarketCandidates } from '@/lib/db/schema';
 
 interface RawSale {
   date: string;
@@ -32,10 +32,18 @@ interface CompSale {
   yearBuilt: number | null;
   postalCode: string;
   isSelf: boolean;
+  /** Måneder siden handlen */
+  ageMonths: number;
+  /** Pct delta vs subjectListPpm (positiv = solgt OVER udbud) */
+  vsList: number | null;
+  /** Pct delta vs subjectFmvPpm (positiv = solgt OVER vores FMV) */
+  vsFmv: number | null;
   /** 0-100 similarity til subject */
   similarity: number;
   /** Bekræfter buy-tesen */
   thesisCategory: 'above-list' | 'validating-fmv' | 'reference';
+  /** 'internal' = fra vores scrape · 'resight' = ekstern tinglysningsdata */
+  source: 'internal' | 'resight';
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -78,13 +86,27 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       );
   }
 
-  // 6-års cutoff for reference, 4-år for strong (vægter recency men holder volume)
-  const cutoff6y = new Date();
-  cutoff6y.setFullYear(cutoff6y.getFullYear() - 6);
-  const cutoff6yStr = cutoff6y.toISOString().slice(0, 10);
-  const cutoff4y = new Date();
+  // Tids-cutoffs — comps SKAL være FRISKE (real-estate standard er 6 mdr).
+  // 4y = reference-pool / median-grundlag (bredt nok til CAGR-trend)
+  // 6m / 12m / 24m = strong-comps tiers (degraderer kun ved coverage-mangel)
+  const now = new Date();
+  const offsetMonths = (m: number) => {
+    const d = new Date(now);
+    d.setMonth(d.getMonth() - m);
+    return d.toISOString().slice(0, 10);
+  };
+  const cutoff4mStr = offsetMonths(4);
+  const cutoff6mStr = offsetMonths(6);
+  const cutoff12mStr = offsetMonths(12);
+  const cutoff24mStr = offsetMonths(24);
+  const cutoff4y = new Date(now);
   cutoff4y.setFullYear(cutoff4y.getFullYear() - 4);
   const cutoff4yStr = cutoff4y.toISOString().slice(0, 10);
+
+  // Hard filter: opførselsår skal være indenfor ±25 år af subject
+  const yearBuiltTolerance = 25;
+  const nowMs = now.getTime();
+  const DAY_MS = 1000 * 60 * 60 * 24;
 
   function similarity(peer: {
     kvm: number | null;
@@ -92,22 +114,31 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     postalCode: string;
   }, saleDate: string): number {
     let score = 0;
-    // kvm-nærhed (max 35) — eksponentiel falloff
-    if (peer.kvm && subjectKvm) {
-      const diff = Math.abs(peer.kvm - subjectKvm) / subjectKvm;
-      score += Math.max(0, 35 - diff * 150);
-    }
-    // byggeår-nærhed (max 25)
+    // TIME-NÆRHED (max 50) — DOMINANT FAKTOR
+    // Lineær falloff: 0 dage = 50, 365 dage = 38, 730 dage = 25, 1460 dage = 0
+    const saleMs = new Date(saleDate).getTime();
+    const ageDays = Math.max(0, (nowMs - saleMs) / DAY_MS);
+    score += Math.max(0, 50 - (ageDays / 1460) * 50);
+
+    // BYGGEÅR-NÆRHED (max 30) — sekundær faktor
+    // Hard filter er allerede applied i collectSales, så her bare grade scoring
     if (peer.yearBuilt && subjectYear) {
       const yearDiff = Math.abs(peer.yearBuilt - subjectYear);
-      score += Math.max(0, 25 - yearDiff * 1.5);
+      score += Math.max(0, 30 - yearDiff * 1.2);
+    } else {
+      // Manglende byggeår → del af score gives ikke
+      score += 10;
     }
-    // dato-nyhed (max 30) — yngre = bedre
-    const saleYear = parseInt(saleDate.slice(0, 4));
-    const ageYears = 2026 - saleYear;
-    score += Math.max(0, 30 - ageYears * 6);
-    // lokalitet
-    if (peer.postalCode === subjectPostal) score += 10;
+
+    // KVM-NÆRHED (max 15) — minor faktor
+    if (peer.kvm && subjectKvm) {
+      const diff = Math.abs(peer.kvm - subjectKvm) / subjectKvm;
+      score += Math.max(0, 15 - diff * 60);
+    }
+
+    // LOKALITET (max 5) — bonus
+    if (peer.postalCode === subjectPostal) score += 5;
+
     return Math.min(100, Math.round(score));
   }
 
@@ -119,6 +150,14 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     for (const p of peerRows) {
       const hist = p.historicalSales as RawSale[] | null;
       if (!hist) continue;
+      // HARD FILTER: byggeår skal ligge indenfor ±25 år af subject
+      if (
+        subjectYear &&
+        p.yearBuilt &&
+        Math.abs(p.yearBuilt - subjectYear) > yearBuiltTolerance
+      ) {
+        continue;
+      }
       for (const s of hist) {
         if (s.type !== 'normal') continue;
         if (s.date < cutoffStr) continue;
@@ -141,6 +180,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
           thesisCategory = 'validating-fmv';
         }
 
+        const ageMonths =
+          Math.max(0, (nowMs - new Date(s.date).getTime()) / DAY_MS) / 30.44;
+
         sales.push({
           date: s.date,
           amount: s.amount,
@@ -150,24 +192,115 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
           yearBuilt: p.yearBuilt,
           postalCode: p.postalCode,
           isSelf: p.id === id,
+          ageMonths: Math.round(ageMonths * 10) / 10,
+          vsList: subjectListPpm ? (ppm - subjectListPpm) / subjectListPpm : null,
+          vsFmv: subjectFmvPpm ? (ppm - subjectFmvPpm) / subjectFmvPpm : null,
           similarity: similarity(p, s.date),
           thesisCategory,
+          source: 'internal',
         });
       }
     }
     return sales;
   }
 
-  // Trin 1: prøv postnr med 6-års vindue
+  // ─── EKSTERN POOL: Resight tinglysningsdata ──────────────────────────────
+  // Friske private handler (≤4 år, samme postnr, kvm ±30%) fra hele KBH-coverage —
+  // ikke begrænset til adresser vi pt. scraper. Det giver markant flere comps,
+  // især i den 6-mdr-friske ende hvor vores scrape-coverage er tynd.
+  async function queryExternalSales(by: 'postnr' | 'bydel'): Promise<CompSale[]> {
+    if (by === 'bydel') {
+      // external_sales har ikke bydel — vi mapper alle postnr i samme bydel
+      // (kun relevant ved fallback, sjældent brugt). Skip for nu.
+      return [];
+    }
+    const rows = await db
+      .select({
+        address: externalSales.address,
+        saleDate: externalSales.saleDate,
+        amount: externalSales.amount,
+        kvm: externalSales.kvm,
+        perAreaPrice: externalSales.perAreaPrice,
+        postalCode: externalSales.postalCode,
+      })
+      .from(externalSales)
+      .where(
+        and(
+          eq(externalSales.postalCode, subjectPostal),
+          gte(externalSales.saleDate, cutoff4yStr),
+          sql`${externalSales.kvm} BETWEEN ${kvmMin} AND ${kvmMax}`,
+        ),
+      );
+
+    const out: CompSale[] = [];
+    for (const r of rows) {
+      if (!r.kvm || r.kvm <= 0 || !r.amount) continue;
+      const ppm = r.perAreaPrice ?? r.amount / r.kvm;
+      if (ppm < 5_000) continue; // sanity floor
+
+      let thesisCategory: 'above-list' | 'validating-fmv' | 'reference' = 'reference';
+      if (subjectListPpm && ppm >= subjectListPpm * 1.0) {
+        thesisCategory = 'above-list';
+      } else if (
+        subjectFmvPpm &&
+        ppm >= subjectFmvPpm * 0.92 &&
+        ppm <= subjectFmvPpm * 1.15
+      ) {
+        thesisCategory = 'validating-fmv';
+      }
+
+      const ageMonths =
+        Math.max(0, (nowMs - new Date(r.saleDate).getTime()) / DAY_MS) / 30.44;
+
+      out.push({
+        date: r.saleDate,
+        amount: r.amount,
+        perAreaPrice: Math.round(ppm),
+        address: r.address,
+        kvm: r.kvm,
+        yearBuilt: null, // Resight har ikke byggeår på handlen
+        postalCode: r.postalCode,
+        isSelf: false,
+        ageMonths: Math.round(ageMonths * 10) / 10,
+        vsList: subjectListPpm ? (ppm - subjectListPpm) / subjectListPpm : null,
+        vsFmv: subjectFmvPpm ? (ppm - subjectFmvPpm) / subjectFmvPpm : null,
+        // Resight-handler: ingen byggeår → similarity uden year-component
+        similarity: similarity({ kvm: r.kvm, yearBuilt: null, postalCode: r.postalCode }, r.saleDate),
+        thesisCategory,
+        source: 'resight',
+      });
+    }
+    return out;
+  }
+
+  // ─── DEDUP: undgå at samme handel tælles dobbelt ─────────────────────────
+  // (Hvis Resight-handel matcher en internal historicalSales på dato+adresse,
+  //  beholder vi den interne — den har byggeår.)
+  function dedupe(sales: CompSale[]): CompSale[] {
+    const seen = new Set<string>();
+    const out: CompSale[] = [];
+    // Sortér internal først (foretrukken)
+    sales.sort((a, b) => (a.source === 'internal' ? -1 : b.source === 'internal' ? 1 : 0));
+    for (const s of sales) {
+      const key = `${s.date}|${s.address.toLowerCase().replace(/\s+/g, '')}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(s);
+    }
+    return out;
+  }
+
+  // Trin 1: prøv postnr med 4-års vindue (friske comps)
   let scope: 'postnr' | 'bydel' = 'postnr';
   let peers = await queryPeers('postnr');
-  let allSales = collectSales(peers, cutoff6yStr);
+  const externalForPostnr = await queryExternalSales('postnr');
+  let allSales = dedupe([...collectSales(peers, cutoff4yStr), ...externalForPostnr]);
 
-  // Trin 2: hvis < 5 nylige handler, udvid til bydel
+  // Trin 2: hvis < 5 nylige handler, udvid til bydel (stadig 4 år, kun internal)
   if (allSales.length < 5 && subjectBydel) {
     scope = 'bydel';
     peers = await queryPeers('bydel');
-    allSales = collectSales(peers, cutoff6yStr);
+    allSales = dedupe([...collectSales(peers, cutoff4yStr), ...externalForPostnr]);
   }
 
   // Sort by similarity desc, then recency
@@ -181,45 +314,58 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const median = ppmArr.length > 0 ? ppmArr[Math.floor(ppmArr.length / 2)] : null;
   const compBasedFmv = median && subjectKvm > 0 ? Math.round(median * subjectKvm) : null;
 
-  // Strong comps: above-list eller validating-fmv, 4-års vindue, similarity ≥ 30.
-  // Hvis < 3 efter strikt filter:
-  //   trin 2: drop similarity (4 år, kategori-only)
-  //   trin 3: udvid til 6 år (uden similarity)
-  let strongComps = allSales
-    .filter(
-      (s) =>
-        s.date >= cutoff4yStr &&
-        s.similarity >= 30 &&
-        (s.thesisCategory === 'above-list' || s.thesisCategory === 'validating-fmv'),
-    )
-    .slice(0, 10);
+  // Strong comps: thesis-hits (solgt ≥ udbud ELLER inden for FMV-bånd).
+  // Cascade fra strikt 4 mdr → 6 mdr → 12 mdr → 24 mdr → 4 år.
+  // 6 mdr er real-estate-industriens guld-standard — vi degraderer kun ved coverage-mangel.
+  const isThesisHit = (s: CompSale) =>
+    s.thesisCategory === 'above-list' || s.thesisCategory === 'validating-fmv';
 
-  if (strongComps.length < 3) {
-    strongComps = allSales
-      .filter(
-        (s) =>
-          s.date >= cutoff4yStr &&
-          (s.thesisCategory === 'above-list' || s.thesisCategory === 'validating-fmv'),
-      )
-      .slice(0, 10);
-  }
+  const tiers: Array<{ cutoff: string; label: string }> = [
+    { cutoff: cutoff4mStr, label: '4m' },
+    { cutoff: cutoff6mStr, label: '6m' },
+    { cutoff: cutoff12mStr, label: '12m' },
+    { cutoff: cutoff24mStr, label: '24m' },
+    { cutoff: cutoff4yStr, label: '4y' },
+  ];
 
-  if (strongComps.length < 3) {
-    strongComps = allSales
-      .filter(
-        (s) => s.thesisCategory === 'above-list' || s.thesisCategory === 'validating-fmv',
-      )
+  let strongComps: CompSale[] = [];
+  let strongCompsTier: string = '4y';
+  for (const { cutoff, label } of tiers) {
+    const tierHits = allSales
+      .filter((s) => s.date >= cutoff && isThesisHit(s))
       .slice(0, 10);
+    if (tierHits.length >= 3) {
+      strongComps = tierHits;
+      strongCompsTier = label;
+      break;
+    }
+    // Hold fast i den bedste tier vi har, hvis ingen senere giver ≥3
+    if (tierHits.length > strongComps.length) {
+      strongComps = tierHits;
+      strongCompsTier = label;
+    }
   }
 
   // Aggregate verdict
   const aboveListCount = allSales.filter((s) => s.thesisCategory === 'above-list').length;
   const validatingCount = allSales.filter((s) => s.thesisCategory === 'validating-fmv').length;
+  const fresh6mCount = allSales.filter((s) => s.date >= cutoff6mStr).length;
+  const fresh12mCount = allSales.filter((s) => s.date >= cutoff12mStr).length;
   const strongCompsMedian =
     strongComps.length > 0
       ? strongComps.map((s) => s.perAreaPrice).sort((a, b) => a - b)[
           Math.floor(strongComps.length / 2)
         ]
+      : null;
+
+  // Median delta vs udbud / vores FMV på strong comps (de tal investoren skal læse først)
+  const strongCompsVsList =
+    strongComps.length > 0 && subjectListPpm
+      ? (strongCompsMedian! - subjectListPpm) / subjectListPpm
+      : null;
+  const strongCompsVsFmv =
+    strongComps.length > 0 && subjectFmvPpm
+      ? (strongCompsMedian! - subjectFmvPpm) / subjectFmvPpm
       : null;
 
   return NextResponse.json({
@@ -233,9 +379,16 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     compBasedFmv,
     strongCompsMedian,
     strongCompsCount: strongComps.length,
+    strongCompsTier,
+    strongCompsVsList,
+    strongCompsVsFmv,
     aboveListCount,
     validatingCount,
+    fresh6mCount,
+    fresh12mCount,
     sampleSize: allSales.length,
+    externalSalesCount: allSales.filter((s) => s.source === 'resight').length,
+    internalSalesCount: allSales.filter((s) => s.source === 'internal').length,
     sales: allSales.slice(0, 25),
     strongComps,
   });

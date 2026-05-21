@@ -105,12 +105,15 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const ppm = sales.filter((s) => s.perAreaPrice > 0).map((s) => s.perAreaPrice).sort((a, b) => a - b);
   const median = ppm.length > 0 ? ppm[Math.floor(ppm.length / 2)] : null;
 
+  const compBasedFmv = median && subjectKvm > 0 ? Math.round(median * subjectKvm) : null;
+
   return NextResponse.json({
     subjectKvm,
     subjectPostal,
     subjectBydel,
     scope,
     medianPerSqm: median,
+    compBasedFmv,
     sampleSize: sales.length,
     sales: sales.slice(0, 25),
   });

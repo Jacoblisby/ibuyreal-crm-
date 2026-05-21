@@ -714,27 +714,43 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
               label={c.v3FmvSource === 'manual' ? 'FMV (manuel)' : 'iBuyReal AVM'}
               value={formatKr(live.fmv)}
               sub={
-                c.v3FmvSource === 'manual'
-                  ? 'manuelt sat værdi'
-                  : c.v3FmvSource === 'ibuyreal-avm'
-                  ? 'XGBoost prediction'
-                  : 'listPris fallback'
+                live.kvm > 0
+                  ? `${formatKr(live.fmv / live.kvm)}/m² · ${
+                      c.v3FmvSource === 'manual'
+                        ? 'manuelt sat'
+                        : c.v3FmvSource === 'ibuyreal-avm'
+                        ? 'XGBoost'
+                        : 'fallback'
+                    }`
+                  : ''
               }
               accent={
-                c.v3FmvSource === 'manual'
-                  ? 'emerald'
-                  : c.v3FmvSource === 'ibuyreal-avm'
+                c.v3FmvSource === 'manual' || c.v3FmvSource === 'ibuyreal-avm'
                   ? 'emerald'
                   : undefined
               }
             />
-            <Kpi label="Investeret" value={formatKr(live.calc.investeret)} sub="tilbudspris + tx" />
+            <Kpi
+              label="Investeret"
+              value={formatKr(live.calc.investeret)}
+              sub={live.kvm > 0 ? `${formatKr(live.calc.investeret / live.kvm)}/m² · tilbudspris + tx` : ''}
+            />
             <Kpi
               label="Max bud (BE worst)"
               value={formatKr(live.max)}
-              sub="højeste pris hvor worst-afkast = 0"
+              sub={live.kvm > 0 ? `${formatKr(live.max / live.kvm)}/m² · break-even worst` : ''}
             />
           </div>
+
+          {/* FMV-sammenligning: 3 AVM-kilder */}
+          <FmvComparison
+            candidateId={c.id}
+            kvm={live.kvm}
+            listPrice={c.listPrice ?? 0}
+            iBuyRealFmv={live.fmv}
+            iBuyRealSource={c.v3FmvSource}
+            publicValuation={c.publicValuation}
+          />
 
           {/* Scenarie-kort med fuld breakdown */}
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
@@ -1579,6 +1595,180 @@ function ComparablesPanel({
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+// ─── FmvComparison — 3-way AVM kr/m² sammenligning ──────────────────────────
+
+function FmvComparison({
+  candidateId,
+  kvm,
+  listPrice,
+  iBuyRealFmv,
+  iBuyRealSource,
+  publicValuation,
+}: {
+  candidateId: string;
+  kvm: number;
+  listPrice: number;
+  iBuyRealFmv: number;
+  iBuyRealSource: string | null;
+  publicValuation: number | null;
+}) {
+  const [compData, setCompData] = useState<{
+    medianPerSqm: number | null;
+    compBasedFmv: number | null;
+    sampleSize: number;
+    scope: 'postnr' | 'bydel';
+  } | null>(null);
+
+  useEffect(() => {
+    fetch(`/api/on-market/${candidateId}/comparables`)
+      .then((r) => r.json())
+      .then(setCompData)
+      .catch(() => {});
+  }, [candidateId]);
+
+  const ppm = (total: number | null | undefined) =>
+    total && kvm > 0 ? total / kvm : null;
+
+  const listPpm = ppm(listPrice);
+  const ibrPpm = ppm(iBuyRealFmv);
+  const compPpm = compData?.medianPerSqm ?? null;
+  const pubPpm = ppm(publicValuation);
+
+  // Implied iBuyReal alpha (vs udbud)
+  const ibrVsList = listPrice > 0 ? ((iBuyRealFmv - listPrice) / listPrice) * 100 : 0;
+  const compVsList =
+    listPrice > 0 && compData?.compBasedFmv
+      ? ((compData.compBasedFmv - listPrice) / listPrice) * 100
+      : null;
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h3 className="mb-4 text-[13px] font-semibold tracking-tight text-slate-900">
+        📊 FMV-sammenligning — 3 uafhængige værdiansættelser
+      </h3>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+        {/* Udbudspris (reference) */}
+        <FmvCard
+          tone="neutral"
+          label="Udbudspris"
+          sub="Boligsiden (sælger)"
+          total={listPrice}
+          ppm={listPpm}
+          deltaVsList={0}
+          showDelta={false}
+        />
+
+        {/* iBuyReal AVM */}
+        <FmvCard
+          tone={iBuyRealSource === 'ibuyreal-avm' || iBuyRealSource === 'manual' ? 'positive' : 'muted'}
+          label={iBuyRealSource === 'manual' ? 'Manuel FMV' : 'iBuyReal AVM'}
+          sub={
+            iBuyRealSource === 'ibuyreal-avm'
+              ? 'XGBoost (proprietær)'
+              : iBuyRealSource === 'manual'
+              ? 'manuelt sat'
+              : 'listPris fallback'
+          }
+          total={iBuyRealFmv}
+          ppm={ibrPpm}
+          deltaVsList={ibrVsList}
+          showDelta={iBuyRealSource !== 'list-price-fallback'}
+        />
+
+        {/* Comparable-based estimate (Boliga-style) */}
+        <FmvCard
+          tone={compData?.compBasedFmv ? 'positive' : 'muted'}
+          label="Comp-baseret"
+          sub={
+            compData
+              ? `median ${compData.scope === 'postnr' ? 'postnr' : 'bydel'} · n=${compData.sampleSize}`
+              : 'henter…'
+          }
+          total={compData?.compBasedFmv ?? null}
+          ppm={compPpm}
+          deltaVsList={compVsList}
+          showDelta={compVsList !== null}
+        />
+
+        {/* Offentlig vurdering (SKAT) */}
+        <FmvCard
+          tone="muted"
+          label="Offentlig vurdering"
+          sub="SKAT (typisk forældet)"
+          total={publicValuation}
+          ppm={pubPpm}
+          deltaVsList={publicValuation && listPrice > 0 ? ((publicValuation - listPrice) / listPrice) * 100 : null}
+          showDelta={!!publicValuation}
+        />
+      </div>
+
+      {/* Konsensus-rationale */}
+      <div className="mt-4 rounded-md border border-slate-100 bg-slate-50/60 p-3 text-xs text-slate-600">
+        <strong className="text-slate-700">Læsevejledning:</strong> Hvis 2-3 uafhængige metoder
+        peger samme vej (fx alle siger underpriset), styrker det signalet. Hvis kun iBuyReal AVM
+        afviger og comp-baseret + offentlig vurdering er enige med udbud, kan AVM'en være over-
+        eller undershooter på denne case. Offentlig vurdering er ofte 30-50% under markedspris
+        (især nyere bygninger) — primært til reference.
+      </div>
+    </div>
+  );
+}
+
+function FmvCard({
+  tone,
+  label,
+  sub,
+  total,
+  ppm,
+  deltaVsList,
+  showDelta,
+}: {
+  tone: 'positive' | 'neutral' | 'muted';
+  label: string;
+  sub: string;
+  total: number | null;
+  ppm: number | null;
+  deltaVsList: number | null;
+  showDelta: boolean;
+}) {
+  const borderColor =
+    tone === 'positive'
+      ? 'border-emerald-200/70'
+      : tone === 'neutral'
+      ? 'border-slate-300'
+      : 'border-slate-200';
+  const bg =
+    tone === 'positive' ? 'bg-emerald-50/30' : tone === 'neutral' ? 'bg-slate-50/60' : 'bg-white';
+  return (
+    <div className={'rounded-lg border p-3 ' + borderColor + ' ' + bg}>
+      <div className="text-[11px] font-medium uppercase tracking-wider text-slate-500">{label}</div>
+      <div className="mt-1.5 text-lg font-semibold tabular-nums text-slate-900">
+        {total !== null && total > 0 ? formatKr(total) : '—'}
+      </div>
+      {ppm && ppm > 0 && (
+        <div className="text-xs tabular-nums text-slate-600">{formatKr(ppm)}/m²</div>
+      )}
+      {showDelta && deltaVsList !== null && (
+        <div
+          className={
+            'mt-1.5 inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium ' +
+            (deltaVsList > 5
+              ? 'bg-emerald-100 text-emerald-700'
+              : deltaVsList < -5
+              ? 'bg-rose-100 text-rose-700'
+              : 'bg-slate-100 text-slate-600')
+          }
+        >
+          {deltaVsList > 0 ? '+' : ''}
+          {deltaVsList.toFixed(1)}% vs udbud
+        </div>
+      )}
+      <div className="mt-1 text-[10px] text-slate-400">{sub}</div>
     </div>
   );
 }

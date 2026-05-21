@@ -27,6 +27,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 { href: '/pipeline', label: 'Pipeline' },
                 { href: '/investors', label: 'Investorer' },
                 { href: '/settings', label: 'Antagelser' },
+                { href: '/admin/external-sales', label: 'Resight' },
               ].map((item) => (
                 <Link
                   key={item.href}

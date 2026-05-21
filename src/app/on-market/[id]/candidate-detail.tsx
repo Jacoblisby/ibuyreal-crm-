@@ -221,6 +221,31 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
     }
   }
 
+  async function toggleHjemfaldspligt() {
+    setBusy(true);
+    const next = !c.hjemfaldspligt;
+    const t = toast.loading(next ? 'Markerer hjemfaldspligt…' : 'Fjerner markering…');
+    try {
+      const r = await fetch(`/api/on-market/${c.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hjemfaldspligt: next }),
+      });
+      if (!r.ok) throw new Error('Kunne ikke opdatere');
+      const updated = (await r.json()) as OnMarketCandidate;
+      setC(updated);
+      toast.success(
+        next ? 'Markeret med hjemfaldspligt — skjules nu fra listen' : 'Hjemfaldspligt-mark fjernet',
+        { id: t },
+      );
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Fejl', { id: t });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function clearManualFmv() {
     setBusy(true);
     const t = toast.loading('Fjerner manuel FMV…');
@@ -354,6 +379,56 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
               · iBuyReal AVM kender ikke denne adresse. Justér FMV i feltet nedenfor og klik "Gem som manuel FMV" for at låse din vurdering ind.
             </span>
           </div>
+        </div>
+      )}
+
+      {/* Hjemfaldspligt + stueetage disqualify-banner */}
+      {(c.hjemfaldspligt || (c.address && /,\s*(st\.?(?:\s|$|,)|stuen|0\.?(?:\s|$|,)|kld\.?)/.test(c.address.toLowerCase()))) && (
+        <div className="flex items-center gap-3 rounded-lg border border-rose-200/70 bg-gradient-to-r from-rose-50 to-white px-4 py-2.5 text-xs text-rose-900 shadow-sm">
+          <svg className="h-4 w-4 shrink-0 text-rose-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+          </svg>
+          <div className="flex-1">
+            <span className="font-semibold">Disqualified —</span>
+            {c.hjemfaldspligt && (
+              <span className="ml-1.5">
+                hjemfaldspligt
+                {c.hjemfaldspligtNote && <em className="ml-1 text-rose-800/80">({c.hjemfaldspligtNote})</em>}
+              </span>
+            )}
+            {c.address && /,\s*(st\.?(?:\s|$|,)|stuen|0\.?(?:\s|$|,)|kld\.?)/.test(c.address.toLowerCase()) && (
+              <span className="ml-1.5">stueetage/kælder</span>
+            )}
+            <span className="ml-1.5 text-rose-800/70">— skjules fra on-market-listen og curated 20.</span>
+          </div>
+          {c.hjemfaldspligt && (
+            <button
+              onClick={toggleHjemfaldspligt}
+              disabled={busy}
+              className="rounded-md border border-rose-300 bg-white px-2 py-1 text-[11px] font-medium text-rose-700 transition-colors hover:bg-rose-50 active:scale-[0.97] disabled:opacity-50"
+            >
+              Fjern hjemfald-mark
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Hjemfald-toggle (vises kun hvis ikke allerede markeret) */}
+      {!c.hjemfaldspligt && (
+        <div className="flex items-center justify-end">
+          <button
+            onClick={toggleHjemfaldspligt}
+            disabled={busy}
+            className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-slate-600 transition-colors hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700 active:scale-[0.97] disabled:opacity-50"
+            title="Markér casen med hjemfaldspligt så den skjules fra on-market-listen og curated 20"
+          >
+            <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+            </svg>
+            Markér med hjemfaldspligt
+          </button>
         </div>
       )}
 

@@ -16,6 +16,7 @@ import { and, eq, gte, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { externalSales, onMarketCandidates } from '@/lib/db/schema';
 import { formatKr, formatPct } from '@/lib/format';
+import { isGroundFloor } from '@/lib/quality';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Pitch — iBuyReal' };
@@ -48,6 +49,36 @@ export default async function PitchPage({ params }: { params: Promise<{ id: stri
           <Link className="underline" href={`/on-market/${id}`}>case-siden</Link>{' '}
           for at låse pitch op.
         </p>
+      </div>
+    );
+  }
+
+  // Disqualify: stueetage eller hjemfaldspligt → vis advarsel i stedet for pitch
+  const disqualifyReasons: string[] = [];
+  if (isGroundFloor(c.address)) disqualifyReasons.push('stueetage');
+  if (c.hjemfaldspligt) {
+    disqualifyReasons.push(
+      `hjemfaldspligt${c.hjemfaldspligtNote ? ` (${c.hjemfaldspligtNote})` : ''}`,
+    );
+  }
+  if (disqualifyReasons.length > 0) {
+    return (
+      <div className="space-y-4">
+        <Link
+          href={`/on-market/${id}`}
+          className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-900"
+        >
+          <span aria-hidden="true">←</span> Tilbage til case-detail
+        </Link>
+        <div className="rounded-2xl border border-rose-200/70 bg-rose-50/40 p-6">
+          <h1 className="text-lg font-semibold text-rose-900">
+            Casen er disqualified — ingen pitch
+          </h1>
+          <p className="mt-2 text-sm text-rose-800">
+            <strong>{c.address}</strong> er udelukket pga.: <strong>{disqualifyReasons.join(' + ')}</strong>.
+            Disse cases skjules som default fra on-market-listen og curated 20.
+          </p>
+        </div>
       </div>
     );
   }

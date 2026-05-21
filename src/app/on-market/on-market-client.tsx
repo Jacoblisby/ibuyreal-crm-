@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import type { OnMarketCandidate, ScrapeJob } from '@/lib/db/schema';
 import { curatedScore, pickCurated } from '@/lib/curation';
 import { formatKr, formatNum, formatPct } from '@/lib/format';
-import { passesQualityFilter } from '@/lib/quality';
+import { isGroundFloor, passesQualityFilter } from '@/lib/quality';
 import { BYDEL_LABEL } from '@/lib/status';
 
 type ReviewStatus = 'ny' | 'interesseret' | 'passet' | 'importeret';
@@ -37,6 +37,8 @@ interface State {
   minPris: string;
   maxPris: string;
   onlyAlpha: boolean;
+  /** Hvis true: vis ogsa stueetage + hjemfaldspligt-cases (default false) */
+  showDisqualified: boolean;
 }
 
 const DEFAULT_STATE: State = {
@@ -49,6 +51,7 @@ const DEFAULT_STATE: State = {
   minPris: '',
   maxPris: '',
   onlyAlpha: false,
+  showDisqualified: false,
 };
 
 const PRESET_LABEL: Record<Preset, { label: string; desc: string }> = {
@@ -81,8 +84,21 @@ export function OnMarketClient({
   const [scraping, setScraping] = useState(false);
   const [s, setS] = useState<State>(DEFAULT_STATE);
 
-  // Beregn preset-counts altid (uafhængigt af andre filtre) til pill-badges
-  const activeRows = useMemo(() => rows.filter((x) => x.status === 'active'), [rows]);
+  // Beregn preset-counts altid (uafhængigt af andre filtre) til pill-badges.
+  // Default skjules stueetage + hjemfaldspligt — kan vises via toggle.
+  const isDisqualified = (x: OnMarketCandidate): boolean =>
+    isGroundFloor(x.address) || x.hjemfaldspligt === true;
+  const disqualifiedCount = useMemo(
+    () => rows.filter((x) => x.status === 'active' && isDisqualified(x)).length,
+    [rows],
+  );
+  const activeRows = useMemo(
+    () =>
+      rows.filter(
+        (x) => x.status === 'active' && (s.showDisqualified || !isDisqualified(x)),
+      ),
+    [rows, s.showDisqualified],
+  );
 
   // Single source of truth for "core picks" logic
   const isCorePick = (x: OnMarketCandidate): boolean =>
@@ -403,6 +419,19 @@ export function OnMarketClient({
             className="h-3.5 w-3.5 cursor-pointer accent-slate-900"
           />
           Kun positiv α
+        </label>
+
+        <label
+          className="inline-flex cursor-pointer select-none items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-slate-600 transition-colors duration-150 ease-[var(--ease-out)] hover:bg-slate-100"
+          title={`${disqualifiedCount} cases er stueetage eller markeret med hjemfaldspligt — skjult som default`}
+        >
+          <input
+            type="checkbox"
+            checked={s.showDisqualified}
+            onChange={(e) => setS((p) => ({ ...p, showDisqualified: e.target.checked }))}
+            className="h-3.5 w-3.5 cursor-pointer accent-slate-900"
+          />
+          Vis stuen + hjemfald ({disqualifiedCount})
         </label>
 
         <div className="ml-auto flex items-center gap-3">

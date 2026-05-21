@@ -11,6 +11,8 @@ const patchSchema = z.object({
   status: z.enum(['active', 'sold', 'ignored']).optional(),
   manualFmv: z.number().positive().nullable().optional(),
   manualFmvNote: z.string().nullable().optional(),
+  hjemfaldspligt: z.boolean().optional(),
+  hjemfaldspligtNote: z.string().nullable().optional(),
 });
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {

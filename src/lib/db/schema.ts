@@ -16,6 +16,7 @@ import {
   index,
   uniqueIndex,
   jsonb,
+  boolean,
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
 
@@ -307,6 +308,17 @@ export const onMarketCandidates = pgTable(
     // Status
     status: text('status').notNull().default('active'), // active | sold | ignored
     reviewStatus: text('review_status').notNull().default('ny'), // ny | interesseret | passet | importeret
+
+    /**
+     * Manuel disqualify-flag for hjemfaldspligt (leasehold-reversion).
+     * Sættes via toggle på case-detail-siden. Hvis true skjules casen
+     * fra on-market-listen + pitch + curated.
+     * Hjemfaldspligt findes ikke i Boligsiden/Resight-data, så det MÅ
+     * markeres manuelt.
+     */
+    hjemfaldspligt: boolean('hjemfaldspligt').notNull().default(false),
+    /** Fri tekst-note om hjemfaldspligt (fx "udløb 2052, kommunal grund") */
+    hjemfaldspligtNote: text('hjemfaldspligt_note'),
 
     // Hvis konverteret til Property
     convertedPropertyId: uuid('converted_property_id').references(() => properties.id, {

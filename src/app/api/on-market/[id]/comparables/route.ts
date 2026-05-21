@@ -21,9 +21,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const kvmMin = Math.floor(subjectKvm * 0.75);
   const kvmMax = Math.ceil(subjectKvm * 1.25);
   const subjectPostal = subject.postalCode;
+  const subjectBydel = subject.bydel;
 
-  // Hent alle kandidater i samme postnr inden for kvm-tolerance der HAR historiske handler
-  const peers = await db
+  // Trin 1: prøv samme postnr (mest precise sammenligning)
+  let scope: 'postnr' | 'bydel' = 'postnr';
+  let peers = await db
     .select({
       id: onMarketCandidates.id,
       address: onMarketCandidates.address,
@@ -40,6 +42,28 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         sql`${onMarketCandidates.kvm} BETWEEN ${kvmMin} AND ${kvmMax}`,
       ),
     );
+
+  // Trin 2: hvis < 3 matches, udvid til hele bydelen
+  if (peers.length < 3 && subjectBydel) {
+    scope = 'bydel';
+    peers = await db
+      .select({
+        id: onMarketCandidates.id,
+        address: onMarketCandidates.address,
+        postalCode: onMarketCandidates.postalCode,
+        kvm: onMarketCandidates.kvm,
+        yearBuilt: onMarketCandidates.yearBuilt,
+        historicalSales: onMarketCandidates.historicalSales,
+      })
+      .from(onMarketCandidates)
+      .where(
+        and(
+          eq(onMarketCandidates.bydel, subjectBydel),
+          isNotNull(onMarketCandidates.historicalSales),
+          sql`${onMarketCandidates.kvm} BETWEEN ${kvmMin} AND ${kvmMax}`,
+        ),
+      );
+  }
 
   // Udflad historik til en flad liste af handler
   const cutoff = new Date();
@@ -89,6 +113,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   return NextResponse.json({
     subjectKvm,
     subjectPostal,
+    subjectBydel,
+    scope,
     medianPerSqm: median,
     sampleSize: sales.length,
     sales: sales.slice(0, 25),

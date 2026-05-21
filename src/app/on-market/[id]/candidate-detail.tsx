@@ -1446,6 +1446,8 @@ function ComparablesPanel({
   interface CompResp {
     subjectKvm: number;
     subjectPostal: string;
+    subjectBydel: string | null;
+    scope: 'postnr' | 'bydel';
     medianPerSqm: number | null;
     sampleSize: number;
     sales: Array<{
@@ -1499,7 +1501,13 @@ function ComparablesPanel({
     <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-[13px] font-semibold tracking-tight text-slate-900">
-          Sammenlignelige handler (samme postnr {data.subjectPostal}, ±25% kvm, 5 år)
+          Sammenlignelige handler{' '}
+          <span className="font-normal text-slate-500">
+            ({data.scope === 'postnr'
+              ? `samme postnr ${data.subjectPostal}`
+              : `samme bydel ${data.subjectBydel ?? ''} — udvidet pga. lille postnr`}
+            , ±25% kvm, 5 år)
+          </span>
         </h3>
         <span className="text-xs text-slate-500">
           n={data.sampleSize} · median{' '}

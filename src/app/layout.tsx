@@ -22,6 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 { href: '/', label: 'Dashboard' },
                 { href: '/calculator', label: 'Boligberegner' },
                 { href: '/on-market', label: 'On-market' },
+                { href: '/market-overview', label: 'Marked' },
                 { href: '/screening', label: 'Screening' },
                 { href: '/pipeline', label: 'Pipeline' },
                 { href: '/investors', label: 'Investorer' },

@@ -15,12 +15,13 @@ export default async function OnMarketPage() {
     .from(onMarketCandidates)
     .orderBy(desc(onMarketCandidates.v3AfkastBest));
 
-  // Pre-load Resight-handler de seneste 6 mdr (lille pool — bruges som
-  // ekstra peer-data til strong-fresh-comp gate i Curated 20).
+  // Pre-load Resight-handler de seneste 4 mdr (lille pool — bruges som
+  // ekstra peer-data til strong-fresh-comp gate i Top picks).
   // Curation kører client-side; ekstern data er ikke i candidate-row,
   // så vi pre-computer per-kandidat-tællingen server-side.
+  // Bemærk: vi henter 4m så vi har lidt margin over de 3m vi bruger i gate'n.
   const cutoff6m = new Date();
-  cutoff6m.setMonth(cutoff6m.getMonth() - 6);
+  cutoff6m.setMonth(cutoff6m.getMonth() - 4);
   const cutoff6mStr = cutoff6m.toISOString().slice(0, 10);
   const extRows = await db
     .select({
@@ -36,8 +37,7 @@ export default async function OnMarketPage() {
     .where(gte(externalSales.saleDate, cutoff6mStr));
 
   const strongFreshMap = computeStrongFreshCompMap(rows, extRows, {
-    monthsBack: 5,
-    abovePct: 0,
+    monthsBack: 3,
   });
 
   const [lastJob] = await db

@@ -213,15 +213,20 @@ export function pickCurated(
   opts?: {
     monthsBack?: number;
     /**
+     * Hvor langt UNDER udbud/m² medianen må ligge før gaten dropper casen.
+     * Default 0.93 = 7% tolerance. Sat så cases som markedet er marginalt
+     * uenig med (men hvor AVM stadig siger underpriced) ikke straffes hårdt.
+     */
+    medianThreshold?: number;
+    /**
      * Pre-computed friske-comp aggregat per kandidat-ID (server-side, inkl.
-     * Resight external_sales). HARD GATE: medianAboveList === true,
-     * dvs. medianen af alle friske comps i kvm+byggeår+postnr-båndet
-     * skal være ≥ subject's udbud/m².
+     * Resight external_sales). HARD GATE: medianPpm ≥ subjectListPpm × threshold.
      */
     strongFreshMap?: Record<string, StrongFreshAggregate>;
   },
 ): Array<OnMarketCandidate & { score: CuratedScore; strongFreshComps: StrongFreshComp[]; strongFreshAggregate: StrongFreshAggregate }> {
-  const monthsBack = opts?.monthsBack ?? 5;
+  const monthsBack = opts?.monthsBack ?? 3;
+  const medianThreshold = opts?.medianThreshold ?? 0.93;
   const precomputed = opts?.strongFreshMap;
 
   // Pool for peer-search = alle aktive
@@ -256,8 +261,15 @@ export function pickCurated(
       const strongFreshAggregate = precomputed?.[c.id] ?? fallbackAgg;
       return { ...c, score: curatedScore(c), strongFreshComps, strongFreshAggregate };
     })
-    // HARD GATE: median af friske comps SKAL være ≥ udbud/m²
-    .filter((c) => c.strongFreshAggregate.medianAboveList);
+    // HARD GATE: median af friske comps ≥ udbud/m² × threshold (default 93%).
+    // Bruger absolut threshold-check ikke pre-computed `medianAboveList`, så
+    // pickCurated kan styre toleranceen uafhængigt af aggregatet.
+    .filter((c) => {
+      const agg = c.strongFreshAggregate;
+      if (!agg.medianPpm || !c.kvm || !c.listPrice) return false;
+      const listPpm = c.listPrice / c.kvm;
+      return agg.medianPpm >= listPpm * medianThreshold;
+    });
 
   scored.sort((a, b) => b.score.total - a.score.total);
   return scored.slice(0, n);

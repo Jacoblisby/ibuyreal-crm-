@@ -59,7 +59,7 @@ const PRESET_LABEL: Record<Preset, { label: string; desc: string }> = {
   curated: {
     label: 'Top picks',
     desc:
-      'Hard gate: median af friske comps (sidste 5 mdr i samme postnr+kvm+byggeår) ≥ udbud/m² · kvm ≤ 100 · ikke stueetage · ikke hjemfaldspligt · ikke 1950-1990 · ikke støjstreets · positiv α · AVM eller manuel FMV. Rangering: composite-score 0-100. Cap: 15.',
+      'Hard gate: median af friske comps (sidste 3 mdr i samme postnr+kvm+byggeår) ≥ 93% af udbud/m² · kvm ≤ 100 · ikke stueetage · ikke hjemfaldspligt · ikke 1950-1990 · ikke støjstreets · positiv α · AVM eller manuel FMV. Rangering: composite-score 0-100. Cap: 15.',
   },
   core: {
     label: 'Core picks',
@@ -506,7 +506,7 @@ export function OnMarketClient({
                   <th className="px-3 py-2.5 text-right" title="Top-pick score 0-100 baseret på AVM, kvalitet, data-freshness, bydel, market signals">
                     Score
                   </th>
-                  <th className="px-3 py-2.5 text-right" title="Median af friske comps (sidste 5 mdr i samme postnr+kvm+byggeår), vist som % over/under vores udbud. Hard gate: median SKAL være ≥ udbud/m² for at komme på listen.">
+                  <th className="px-3 py-2.5 text-right" title="Median af friske comps (sidste 3 mdr i samme postnr+kvm+byggeår), vist som % over/under vores udbud. Hard gate: median ≥ 93% af udbud/m² for at komme på listen.">
                     Median vs udbud
                   </th>
                 </>

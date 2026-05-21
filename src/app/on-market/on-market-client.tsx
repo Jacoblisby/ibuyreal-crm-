@@ -57,7 +57,7 @@ const DEFAULT_STATE: State = {
 const PRESET_LABEL: Record<Preset, { label: string; desc: string }> = {
   all: { label: 'Alle', desc: 'Vis alle aktive listings' },
   curated: {
-    label: 'Curated 20',
+    label: 'Top picks',
     desc:
       'Hard gate: ≥1 frisk comp (sidste 5 mdr) solgt ≥ udbud/m² (vores scrape + Resight tinglysningsdata) · ikke stueetage · ikke 1950-1990 · ikke støjstreets · positiv α · AVM eller manuel FMV. Rangering: composite-score 0-100.',
   },
@@ -456,7 +456,7 @@ export function OnMarketClient({
             <tr>
               {s.preset === 'curated' && (
                 <>
-                  <th className="px-3 py-2.5 text-right" title="Curated score 0-100 baseret på AVM, kvalitet, data-freshness, bydel, market signals">
+                  <th className="px-3 py-2.5 text-right" title="Top-pick score 0-100 baseret på AVM, kvalitet, data-freshness, bydel, market signals">
                     Score
                   </th>
                   <th className="px-3 py-2.5 text-right" title="Antal handler i nær-området sidste 5 mdr solgt ≥ vores udbudspris/m². Hard gate: ≥1 påkrævet for at komme på listen.">

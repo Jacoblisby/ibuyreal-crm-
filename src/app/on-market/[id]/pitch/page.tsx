@@ -76,7 +76,7 @@ export default async function PitchPage({ params }: { params: Promise<{ id: stri
           </h1>
           <p className="mt-2 text-sm text-rose-800">
             <strong>{c.address}</strong> er udelukket pga.: <strong>{disqualifyReasons.join(' + ')}</strong>.
-            Disse cases skjules som default fra on-market-listen og curated 20.
+            Disse cases skjules som default fra on-market-listen og top picks.
           </p>
         </div>
       </div>

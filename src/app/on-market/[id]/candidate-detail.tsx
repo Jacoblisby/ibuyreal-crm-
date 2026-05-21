@@ -400,7 +400,7 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
             {c.address && /,\s*(st\.?(?:\s|$|,)|stuen|0\.?(?:\s|$|,)|kld\.?)/.test(c.address.toLowerCase()) && (
               <span className="ml-1.5">stueetage/kælder</span>
             )}
-            <span className="ml-1.5 text-rose-800/70">— skjules fra on-market-listen og curated 20.</span>
+            <span className="ml-1.5 text-rose-800/70">— skjules fra on-market-listen og top picks.</span>
           </div>
           {c.hjemfaldspligt && (
             <button
@@ -421,7 +421,7 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
             onClick={toggleHjemfaldspligt}
             disabled={busy}
             className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-slate-600 transition-colors hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700 active:scale-[0.97] disabled:opacity-50"
-            title="Markér casen med hjemfaldspligt så den skjules fra on-market-listen og curated 20"
+            title="Markér casen med hjemfaldspligt så den skjules fra on-market-listen og top picks"
           >
             <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10" />
@@ -1432,7 +1432,7 @@ function CuratedHero({ score }: { score: ReturnType<typeof curatedScore> }) {
       <div className="flex flex-col items-start justify-between border-b border-slate-100 pb-4 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-5">
         <div>
           <div className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
-            Curated score
+            Top-pick score
           </div>
           <div className="mt-1 flex items-baseline gap-2">
             <span

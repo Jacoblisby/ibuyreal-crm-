@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import type { OnMarketCandidate, ScrapeJob } from '@/lib/db/schema';
 import { curatedScore, pickCurated } from '@/lib/curation';
 import { formatKr, formatNum, formatPct } from '@/lib/format';
-import { isGroundFloor, passesQualityFilter } from '@/lib/quality';
+import { classifyEjerudgift, isGroundFloor, passesQualityFilter } from '@/lib/quality';
 import { BYDEL_LABEL } from '@/lib/status';
 
 type ReviewStatus = 'ny' | 'interesseret' | 'passet' | 'importeret';
@@ -519,6 +519,7 @@ export function OnMarketClient({
               <th className="px-3 py-2.5 text-right">Pris</th>
               <th className="px-3 py-2.5 text-right">kr/m²</th>
               <th className="px-3 py-2.5 text-right">Dage</th>
+              <th className="px-3 py-2.5 text-right" title="Ejerudgift kr/m²/år. >1200 = høj (mulig restgæld), >1800 = meget høj. <800 = lav.">Ejerudg</th>
               <th className="px-3 py-2.5 text-right">FMV</th>
               <th className="px-3 py-2.5 text-right" title="Alpha = (FMV - investeret) / investeret. Positiv = underpriset.">α</th>
               <th className="px-3 py-2.5 text-right" title="Best-case afkast = α + 14.8% beta + Airbnb cf-yield">Best</th>
@@ -616,6 +617,35 @@ export function OnMarketClient({
                   </td>
                   <td className="px-3 py-2.5 text-right tabular-nums text-xs text-slate-500">
                     {r.daysOnMarket ?? '–'}
+                  </td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-xs">
+                    {(() => {
+                      const info = classifyEjerudgift({
+                        monthlyExpense: r.monthlyExpense,
+                        kvm: r.kvm,
+                        listPrice: r.listPrice,
+                      });
+                      if (info.perSqmPerYear === null) {
+                        return <span className="text-slate-400">–</span>;
+                      }
+                      const tone =
+                        info.level === 'meget høj'
+                          ? 'text-rose-700 font-semibold'
+                          : info.level === 'høj'
+                          ? 'text-amber-700 font-semibold'
+                          : info.level === 'lav'
+                          ? 'text-emerald-700'
+                          : 'text-slate-600';
+                      return (
+                        <span
+                          className={'tabular-nums ' + tone}
+                          title={`${info.perSqmPerYear} kr/m²/år · ${((info.pctOfListPrice ?? 0) * 100).toFixed(2)}% af udbud — niveau: ${info.level}${info.warning ? '\n\n⚠ ' + info.warning : ''}`}
+                        >
+                          {info.perSqmPerYear}
+                          {info.warning && <span className="ml-0.5">⚠</span>}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td className="px-3 py-2.5 text-right tabular-nums text-xs">
                     {r.v3Fmv ? (

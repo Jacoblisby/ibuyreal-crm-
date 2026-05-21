@@ -16,7 +16,7 @@ import { and, eq, gte, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { externalSales, onMarketCandidates } from '@/lib/db/schema';
 import { formatKr, formatPct } from '@/lib/format';
-import { isGroundFloor } from '@/lib/quality';
+import { classifyEjerudgift, isGroundFloor } from '@/lib/quality';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Pitch — iBuyReal' };
@@ -314,6 +314,39 @@ export default async function PitchPage({ params }: { params: Promise<{ id: stri
           </div>
         </div>
       </div>
+
+      {/* Ejerudgift-warning hvis høj */}
+      {(() => {
+        const ej = classifyEjerudgift({
+          monthlyExpense: c.monthlyExpense,
+          kvm: c.kvm,
+          listPrice: c.listPrice,
+        });
+        if (!ej.warning) return null;
+        return (
+          <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+            <svg className="h-5 w-5 shrink-0 text-amber-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+              <line x1="12" y1="9" x2="12" y2="13" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+            <div>
+              <div className="font-semibold">
+                Ejerudgift {ej.perSqmPerYear} kr/m²/år
+                <span className="ml-2 text-xs font-normal text-amber-800/80">
+                  ({((ej.pctOfListPrice ?? 0) * 100).toFixed(2)}% af udbud)
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-amber-800/80">{ej.warning}</p>
+              <p className="mt-2 text-xs text-amber-800/70">
+                <strong>Næste DD-skridt:</strong> Hent salgsopstilling + ejerforeningens senest godkendte
+                regnskab. Tjek (1) total restgæld i ejerforeningen, (2) lejlighedens andel/byrden,
+                (3) vedligeholdelsesplan og varslede stigninger, (4) reservefondets størrelse.
+              </p>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ─── BEVIS: friske comps ───────────────────────────────────────── */}
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">

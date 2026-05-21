@@ -77,3 +77,54 @@ export function passesQualityFilter(opts: {
     !isConcreteEra(opts.yearBuilt)
   );
 }
+
+// ─── Ejerudgift-niveau ─────────────────────────────────────────────────────
+// Heuristik baseret på kr/m²/år. Høj udgift indikerer typisk:
+//   - Stort restgæld i ejerforeningen (afdrag indregnet i fællesudgift)
+//   - Igangværende vedligeholdelsesplan (facade, tag, vinduer)
+//   - Stor reservefonds-opbygning
+//   - Eller bare ekstravagant servicebureau-niveau
+// Tærskler er kalibreret på Q1 2026 KBH+Frb-data.
+
+export type EjerudgiftLevel = 'lav' | 'normal' | 'høj' | 'meget høj';
+
+export interface EjerudgiftInfo {
+  level: EjerudgiftLevel;
+  perSqmPerYear: number | null;
+  pctOfListPrice: number | null;
+  warning: string | null;
+}
+
+/**
+ * Klassificér ejerudgiften som lav/normal/høj/meget-høj baseret på kr/m²/år.
+ * Returnerer null felter hvis vi mangler data.
+ */
+export function classifyEjerudgift(opts: {
+  monthlyExpense: number | null | undefined;
+  kvm: number | null | undefined;
+  listPrice: number | null | undefined;
+}): EjerudgiftInfo {
+  const me = opts.monthlyExpense ?? 0;
+  const kvm = opts.kvm ?? 0;
+  const list = opts.listPrice ?? 0;
+  if (!me || !kvm) {
+    return { level: 'normal', perSqmPerYear: null, pctOfListPrice: null, warning: null };
+  }
+  const perSqm = Math.round((me * 12) / kvm);
+  const pctOfList = list > 0 ? (me * 12) / list : null;
+
+  let level: EjerudgiftLevel = 'normal';
+  let warning: string | null = null;
+  if (perSqm > 1800) {
+    level = 'meget høj';
+    warning =
+      'Meget høj ejerudgift — næsten altid stor restgæld i ejerforeningen eller stort vedligeholdelsesprojekt. Tjek salgsopstilling.';
+  } else if (perSqm > 1200) {
+    level = 'høj';
+    warning =
+      'Høj ejerudgift — kan indikere restgæld eller igangværende renovering. Undersøg salgsopstilling før bud.';
+  } else if (perSqm < 800) {
+    level = 'lav';
+  }
+  return { level, perSqmPerYear: perSqm, pctOfListPrice: pctOfList, warning };
+}

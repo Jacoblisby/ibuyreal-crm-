@@ -1464,11 +1464,36 @@ function CuratedHero({ score }: { score: ReturnType<typeof curatedScore> }) {
         </div>
         {/* Component breakdown */}
         <div className="mt-4 w-full space-y-1.5 text-xs">
-          <ScoreBar label="AVM signal" value={c.avmSignal} max={25} />
-          <ScoreBar label="Kvalitet" value={c.quality} max={25} />
-          <ScoreBar label="Data-freshness" value={c.dataFreshness} max={20} />
-          <ScoreBar label="Bydel" value={c.bydelAttractive} max={15} />
-          <ScoreBar label="Market signals" value={c.marketSignals} max={15} />
+          <ScoreBar
+            label="AVM signal"
+            value={c.avmSignal}
+            max={25}
+            tip="AVM/manuel FMV-coverage + realistisk alpha (5–20% er sweet spot, 20–40% nedvægtet, >40% sandsynligvis overshoot)"
+          />
+          <ScoreBar
+            label="Kvalitet"
+            value={c.quality}
+            max={25}
+            tip="Moderne byggeår (>2000 = 12 pt), pre-krigs (1900–1950 = 10 pt), beton-æra (1950–1990) = 0 pt + red flag. Ikke stueetage + ikke støjgade."
+          />
+          <ScoreBar
+            label="Data-freshness"
+            value={c.dataFreshness}
+            max={20}
+            tip="Recent comparable sale (sidste 5 år = 12 pt) + realistisk seller-CAGR fra sidste handel til udbud (4–8% pa = 8 pt sweet spot)"
+          />
+          <ScoreBar
+            label="Bydel"
+            value={c.bydelAttractive}
+            max={15}
+            tip="Tier A (Indre By/Frb/Østerbro) = 15 pt · Tier B (Vesterbro/Nørrebro) = 10 pt · Tier C (Amager) = 5 pt"
+          />
+          <ScoreBar
+            label="Market signals"
+            value={c.marketSignals}
+            max={15}
+            tip="Sweet-spot dage på markedet (30–150 = 8 pt — ægte prissætning + forhandlingsrum) + realistisk best-case afkast (18–35% = 7 pt, >50% nedvægtet som overshoot)"
+          />
         </div>
       </div>
 
@@ -1521,12 +1546,24 @@ function CuratedHero({ score }: { score: ReturnType<typeof curatedScore> }) {
   );
 }
 
-function ScoreBar({ label, value, max }: { label: string; value: number; max: number }) {
+function ScoreBar({
+  label,
+  value,
+  max,
+  tip,
+}: {
+  label: string;
+  value: number;
+  max: number;
+  tip?: string;
+}) {
   const pct = (value / max) * 100;
   return (
-    <div>
+    <div title={tip} className={tip ? 'cursor-help' : undefined}>
       <div className="flex items-baseline justify-between text-[11px] text-slate-500">
-        <span>{label}</span>
+        <span className={tip ? 'underline decoration-dotted decoration-slate-300 underline-offset-2' : undefined}>
+          {label}
+        </span>
         <span className="tabular-nums">{value}/{max}</span>
       </div>
       <div className="h-1 w-full overflow-hidden rounded-full bg-slate-100">

@@ -327,6 +327,53 @@ export function OnMarketClient({
         </span>
       </div>
 
+      {/* Score-forklaring — vises kun for Top picks */}
+      {s.preset === 'curated' && (
+        <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3 text-xs">
+          <div className="mb-2 flex items-center gap-2">
+            <svg className="h-3.5 w-3.5 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="16" x2="12" y2="12" />
+              <line x1="12" y1="8" x2="12.01" y2="8" />
+            </svg>
+            <span className="font-semibold text-slate-700">
+              Score er 0–100 — sum af 5 komponenter
+            </span>
+            <span className="text-slate-400">(hover en score i tabellen for case-specifik rationale)</span>
+          </div>
+          <div className="grid grid-cols-1 gap-x-4 gap-y-1.5 sm:grid-cols-2 lg:grid-cols-5">
+            <ScoreLegendItem
+              max={25}
+              label="AVM signal"
+              desc="AVM/manuel FMV-coverage + realistisk alpha (5–20% sweet spot)"
+            />
+            <ScoreLegendItem
+              max={25}
+              label="Kvalitet"
+              desc="Moderne byggeri (>2000 best), ikke beton 1950–1990, ikke stuen, ikke støjgade"
+            />
+            <ScoreLegendItem
+              max={20}
+              label="Data freshness"
+              desc="Recent sale + realistisk seller-CAGR (4–8% pa sweet spot)"
+            />
+            <ScoreLegendItem
+              max={15}
+              label="Bydel attractiveness"
+              desc="Tier A (Indre By/Frb/Østerbro) > Tier B (Vesterbro/Nørrebro) > Tier C (Amager)"
+            />
+            <ScoreLegendItem
+              max={15}
+              label="Market signals"
+              desc="Sweet-spot dage på marked (30–150) + realistisk best-afkast (18–35%)"
+            />
+          </div>
+          <div className="mt-2 border-t border-slate-200 pt-2 text-slate-500">
+            <strong className="text-slate-700">≥70</strong> = strong pick · <strong className="text-slate-700">55–69</strong> = solid · <strong className="text-slate-700">&lt;55</strong> = grænse-case
+          </div>
+        </div>
+      )}
+
       {/* Filter bar — grouped + sticky */}
       <div className="sticky top-2 z-10 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white/95 p-2.5 text-sm shadow-sm backdrop-blur-sm">
         {/* Søg */}
@@ -672,6 +719,28 @@ export function OnMarketClient({
         </table>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ScoreLegendItem({
+  max,
+  label,
+  desc,
+}: {
+  max: number;
+  label: string;
+  desc: string;
+}) {
+  return (
+    <div>
+      <div className="flex items-baseline gap-1.5">
+        <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-slate-700">
+          /{max}
+        </span>
+        <span className="text-[11px] font-semibold text-slate-800">{label}</span>
+      </div>
+      <p className="mt-0.5 text-[10.5px] leading-tight text-slate-500">{desc}</p>
     </div>
   );
 }

@@ -182,8 +182,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const compBasedFmv = median && subjectKvm > 0 ? Math.round(median * subjectKvm) : null;
 
   // Strong comps: above-list eller validating-fmv, 4-års vindue, similarity ≥ 30.
-  // Hvis < 3 efter strikt filter, falder vi tilbage til ethvert
-  // above-list/validating uanset similarity (men stadig 4 år).
+  // Hvis < 3 efter strikt filter:
+  //   trin 2: drop similarity (4 år, kategori-only)
+  //   trin 3: udvid til 6 år (uden similarity)
   let strongComps = allSales
     .filter(
       (s) =>
@@ -199,6 +200,14 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         (s) =>
           s.date >= cutoff4yStr &&
           (s.thesisCategory === 'above-list' || s.thesisCategory === 'validating-fmv'),
+      )
+      .slice(0, 10);
+  }
+
+  if (strongComps.length < 3) {
+    strongComps = allSales
+      .filter(
+        (s) => s.thesisCategory === 'above-list' || s.thesisCategory === 'validating-fmv',
       )
       .slice(0, 10);
   }

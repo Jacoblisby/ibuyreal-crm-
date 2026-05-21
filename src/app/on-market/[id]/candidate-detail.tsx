@@ -1,8 +1,9 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { curatedScore } from '@/lib/curation';
 import {
   calculateProperty,
   getRoomFactor,
@@ -288,9 +289,13 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
   const display = c.primaryImage && images.length === 0 ? [c.primaryImage] : images;
   const review = c.reviewStatus as Review;
   const importedAlready = !!c.convertedPropertyId;
+  const score = useMemo(() => curatedScore(c), [c]);
 
   return (
     <div className="space-y-4">
+      {/* JP Morgan-grade hero: curated score + rationale + red flags */}
+      <CuratedHero score={score} />
+
       {/* FMV-status banner */}
       {c.v3FmvSource === 'manual' ? (
         <div className="flex items-center gap-3 rounded-lg border border-blue-200/70 bg-gradient-to-r from-blue-50 to-white px-4 py-2.5 text-xs text-blue-900 shadow-sm">
@@ -922,6 +927,9 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
           {/* Tidligere handler — full width */}
           <HistoryPanel candidate={c} liveFmv={live.fmv} kvm={kvm} listPrice={c.listPrice ?? 0} />
 
+          {/* Comparable sales i samme postnr */}
+          <ComparablesPanel candidateId={c.id} subjectKvm={kvm} listPrice={c.listPrice ?? 0} />
+
           {/* Mæglerbeskrivelse */}
           {(c.descriptionTitle || c.description) && (
             <Panel title="Mæglerbeskrivelse">
@@ -1293,6 +1301,275 @@ function ScenarioCard({
         <Row label="Salgspris" value={formatKr(data.salgspris)} muted />
         <Divider />
         <Row label="Profit (1 års hold)" value={formatKr(data.profit)} bold />
+      </div>
+    </div>
+  );
+}
+
+// ─── CuratedHero — JP Morgan-grade overview ──────────────────────────────────
+
+function CuratedHero({ score }: { score: ReturnType<typeof curatedScore> }) {
+  const grade =
+    score.total >= 75
+      ? { label: 'A — institutional grade', color: 'emerald' }
+      : score.total >= 60
+      ? { label: 'B — solid', color: 'emerald' }
+      : score.total >= 45
+      ? { label: 'C — okay', color: 'amber' }
+      : { label: 'D — speculative', color: 'rose' };
+
+  const c = score.components;
+  return (
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[260px_1fr] rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      {/* Venstre: score-hero */}
+      <div className="flex flex-col items-start justify-between border-b border-slate-100 pb-4 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-5">
+        <div>
+          <div className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
+            Curated score
+          </div>
+          <div className="mt-1 flex items-baseline gap-2">
+            <span
+              className={
+                'text-5xl font-bold tabular-nums tracking-tight ' +
+                (grade.color === 'emerald'
+                  ? 'text-emerald-600'
+                  : grade.color === 'amber'
+                  ? 'text-amber-600'
+                  : 'text-rose-600')
+              }
+            >
+              {score.total}
+            </span>
+            <span className="text-base font-medium text-slate-400">/ 100</span>
+          </div>
+          <div
+            className={
+              'mt-2 inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ' +
+              (grade.color === 'emerald'
+                ? 'bg-emerald-100 text-emerald-700'
+                : grade.color === 'amber'
+                ? 'bg-amber-100 text-amber-700'
+                : 'bg-rose-100 text-rose-700')
+            }
+          >
+            {grade.label}
+          </div>
+        </div>
+        {/* Component breakdown */}
+        <div className="mt-4 w-full space-y-1.5 text-xs">
+          <ScoreBar label="AVM signal" value={c.avmSignal} max={25} />
+          <ScoreBar label="Kvalitet" value={c.quality} max={25} />
+          <ScoreBar label="Data-freshness" value={c.dataFreshness} max={20} />
+          <ScoreBar label="Bydel" value={c.bydelAttractive} max={15} />
+          <ScoreBar label="Market signals" value={c.marketSignals} max={15} />
+        </div>
+      </div>
+
+      {/* Højre: rationale + red flags */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div>
+          <div className="mb-2 inline-flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-emerald-700">
+            <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+            Positive signaler
+          </div>
+          <ul className="space-y-1 text-sm text-slate-700">
+            {score.rationale.length === 0 ? (
+              <li className="text-slate-400 italic">Ingen positive signaler</li>
+            ) : (
+              score.rationale.map((r, i) => (
+                <li key={i} className="flex gap-2">
+                  <span className="text-emerald-500">·</span>
+                  <span>{r}</span>
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
+        <div>
+          <div className="mb-2 inline-flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-rose-700">
+            <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+              <line x1="12" y1="9" x2="12" y2="13" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+            Red flags
+          </div>
+          <ul className="space-y-1 text-sm text-slate-700">
+            {score.redFlags.length === 0 ? (
+              <li className="text-emerald-600 italic">Ingen red flags identificeret</li>
+            ) : (
+              score.redFlags.map((r, i) => (
+                <li key={i} className="flex gap-2">
+                  <span className="text-rose-500">·</span>
+                  <span>{r}</span>
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ScoreBar({ label, value, max }: { label: string; value: number; max: number }) {
+  const pct = (value / max) * 100;
+  return (
+    <div>
+      <div className="flex items-baseline justify-between text-[11px] text-slate-500">
+        <span>{label}</span>
+        <span className="tabular-nums">{value}/{max}</span>
+      </div>
+      <div className="h-1 w-full overflow-hidden rounded-full bg-slate-100">
+        <div
+          className="h-full rounded-full bg-slate-900 transition-all duration-300 ease-[var(--ease-out)]"
+          style={{ width: pct + '%' }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ─── ComparablesPanel — nærlokale 5-års handler ──────────────────────────────
+
+function ComparablesPanel({
+  candidateId,
+  subjectKvm,
+  listPrice,
+}: {
+  candidateId: string;
+  subjectKvm: number;
+  listPrice: number;
+}) {
+  interface CompResp {
+    subjectKvm: number;
+    subjectPostal: string;
+    medianPerSqm: number | null;
+    sampleSize: number;
+    sales: Array<{
+      date: string;
+      amount: number;
+      perAreaPrice: number;
+      address: string;
+      kvm: number;
+      yearBuilt: number | null;
+      isSelf: boolean;
+    }>;
+  }
+  const [data, setData] = useState<CompResp | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    fetch(`/api/on-market/${candidateId}/comparables`)
+      .then((r) => r.json())
+      .then((d) => setData(d))
+      .finally(() => setLoading(false));
+  }, [candidateId]);
+
+  if (loading) {
+    return (
+      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="text-sm text-slate-400">Henter sammenlignelige handler…</div>
+      </div>
+    );
+  }
+  if (!data || data.sampleSize === 0) {
+    return (
+      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h3 className="text-[13px] font-semibold tracking-tight text-slate-900">
+          Sammenlignelige handler (samme postnr, ±25% kvm, 5 år)
+        </h3>
+        <p className="mt-2 text-sm text-slate-400">
+          Ingen nærlokale handler fundet i vores DB. Udvid scrape-coverage for at få sammenlignelige.
+        </p>
+      </div>
+    );
+  }
+
+  const subjectPpm = listPrice && subjectKvm > 0 ? listPrice / subjectKvm : 0;
+  const diffFromMedian =
+    data.medianPerSqm && subjectPpm
+      ? ((subjectPpm - data.medianPerSqm) / data.medianPerSqm) * 100
+      : null;
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-[13px] font-semibold tracking-tight text-slate-900">
+          Sammenlignelige handler (samme postnr {data.subjectPostal}, ±25% kvm, 5 år)
+        </h3>
+        <span className="text-xs text-slate-500">
+          n={data.sampleSize} · median{' '}
+          <strong className="text-slate-900">
+            {data.medianPerSqm ? formatKr(data.medianPerSqm) : '–'}/m²
+          </strong>
+          {diffFromMedian !== null && (
+            <>
+              {' '}
+              · denne case ligger{' '}
+              <strong
+                className={
+                  diffFromMedian < 0
+                    ? 'text-emerald-700'
+                    : diffFromMedian < 10
+                    ? 'text-slate-900'
+                    : 'text-rose-600'
+                }
+              >
+                {diffFromMedian > 0 ? '+' : ''}
+                {diffFromMedian.toFixed(1)}%
+              </strong>{' '}
+              vs median
+            </>
+          )}
+        </span>
+      </div>
+
+      <div className="overflow-hidden rounded-md border border-slate-100">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50 text-left text-[11px] font-medium uppercase tracking-wider text-slate-500">
+            <tr>
+              <th className="px-3 py-2">Dato</th>
+              <th className="px-3 py-2">Adresse</th>
+              <th className="px-3 py-2 text-right">kvm</th>
+              <th className="px-3 py-2 text-right">Bygget</th>
+              <th className="px-3 py-2 text-right">Pris</th>
+              <th className="px-3 py-2 text-right">kr/m²</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.sales.map((s, i) => (
+              <tr
+                key={i}
+                className={
+                  'border-t border-slate-100 ' +
+                  (s.isSelf ? 'bg-amber-50/40' : 'hover:bg-slate-50/60')
+                }
+              >
+                <td className="px-3 py-2 tabular-nums text-slate-600">{s.date}</td>
+                <td className="px-3 py-2 font-medium text-slate-900">
+                  {s.address}
+                  {s.isSelf && (
+                    <span className="ml-2 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                      denne case
+                    </span>
+                  )}
+                </td>
+                <td className="px-3 py-2 text-right tabular-nums">{s.kvm}</td>
+                <td className="px-3 py-2 text-right tabular-nums text-xs text-slate-500">
+                  {s.yearBuilt ?? '–'}
+                </td>
+                <td className="px-3 py-2 text-right tabular-nums">{formatKr(s.amount)}</td>
+                <td className="px-3 py-2 text-right tabular-nums text-slate-700">
+                  {formatKr(s.perAreaPrice)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );

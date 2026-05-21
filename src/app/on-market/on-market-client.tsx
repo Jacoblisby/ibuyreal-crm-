@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import type { OnMarketCandidate, ScrapeJob } from '@/lib/db/schema';
+import { curatedScore, pickCurated } from '@/lib/curation';
 import { formatKr, formatNum, formatPct } from '@/lib/format';
 import { passesQualityFilter } from '@/lib/quality';
 import { BYDEL_LABEL } from '@/lib/status';
@@ -24,7 +25,7 @@ const REVIEW_COLOR: Record<ReviewStatus, string> = {
   importeret: 'bg-blue-100 text-blue-700',
 };
 
-type Preset = 'all' | 'core' | 'fallback';
+type Preset = 'all' | 'curated' | 'core' | 'fallback';
 
 interface State {
   preset: Preset;
@@ -52,6 +53,10 @@ const DEFAULT_STATE: State = {
 
 const PRESET_LABEL: Record<Preset, { label: string; desc: string }> = {
   all: { label: 'Alle', desc: 'Vis alle aktive listings' },
+  curated: {
+    label: 'Curated 20',
+    desc: 'Composite-score: AVM signal + kvalitet + data-freshness + bydel + market signals',
+  },
   core: {
     label: 'Core picks',
     desc:
@@ -85,22 +90,37 @@ export function OnMarketClient({
     (x.v3Alpha ?? 0) < 0.3 &&
     passesQualityFilter({ address: x.address, yearBuilt: x.yearBuilt });
 
+  const curatedTop20 = useMemo(() => pickCurated(activeRows, 20), [activeRows]);
+  const curatedIds = useMemo(() => new Set(curatedTop20.map((x) => x.id)), [curatedTop20]);
+  const scoreMap = useMemo(() => {
+    const m = new Map<string, ReturnType<typeof curatedScore>>();
+    activeRows.forEach((x) => m.set(x.id, curatedScore(x)));
+    return m;
+  }, [activeRows]);
+
   const presetCounts = useMemo(() => {
     return {
       all: activeRows.length,
+      curated: curatedTop20.length,
       core: activeRows.filter(isCorePick).length,
       fallback: activeRows.filter(
         (x) => x.v3FmvSource !== 'ibuyreal-avm' && x.v3FmvSource !== 'manual',
       ).length,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeRows]);
+  }, [activeRows, curatedTop20]);
 
   const filtered = useMemo(() => {
     let r = activeRows;
 
     // Apply preset først
-    if (s.preset === 'core') {
+    if (s.preset === 'curated') {
+      r = r.filter((x) => curatedIds.has(x.id));
+      // Sort by score
+      r = [...r].sort(
+        (a, b) => (scoreMap.get(b.id)?.total ?? 0) - (scoreMap.get(a.id)?.total ?? 0),
+      );
+    } else if (s.preset === 'core') {
       r = r.filter(isCorePick);
     } else if (s.preset === 'fallback') {
       r = r.filter((x) => x.v3FmvSource !== 'ibuyreal-avm' && x.v3FmvSource !== 'manual');
@@ -247,7 +267,7 @@ export function OnMarketClient({
 
       {/* Preset pills */}
       <div className="flex flex-wrap items-center gap-2">
-        {(['all', 'core', 'fallback'] as Preset[]).map((p) => {
+        {(['all', 'curated', 'core', 'fallback'] as Preset[]).map((p) => {
           const active = s.preset === p;
           const meta = PRESET_LABEL[p];
           return (
@@ -393,6 +413,11 @@ export function OnMarketClient({
         <table className="w-full text-sm">
           <thead className="border-b border-slate-200 bg-slate-50/80 text-left text-[11px] font-medium uppercase tracking-wider text-slate-500">
             <tr>
+              {s.preset === 'curated' && (
+                <th className="px-3 py-2.5 text-right" title="Curated score 0-100 baseret på AVM, kvalitet, data-freshness, bydel, market signals">
+                  Score
+                </th>
+              )}
               <th className="px-3 py-2.5">Adresse</th>
               <th className="px-3 py-2.5">Bydel</th>
               <th className="px-3 py-2.5 text-right">kvm</th>
@@ -419,6 +444,28 @@ export function OnMarketClient({
                   className="row-stagger group border-b border-slate-100 transition-colors duration-100 ease-[var(--ease-out)] last:border-0 hover:bg-slate-50"
                   style={{ animationDelay: `${Math.min(idx, 12) * 25}ms` }}
                 >
+                  {s.preset === 'curated' && (
+                    <td className="px-3 py-2.5 text-right">
+                      <div
+                        className="inline-flex flex-col items-end"
+                        title={(scoreMap.get(r.id)?.rationale ?? []).join('\n') + '\n\n' + (scoreMap.get(r.id)?.redFlags.map((f) => '⚠ ' + f).join('\n') ?? '')}
+                      >
+                        <span
+                          className={
+                            'tabular-nums text-base font-bold ' +
+                            ((scoreMap.get(r.id)?.total ?? 0) >= 70
+                              ? 'text-emerald-700'
+                              : (scoreMap.get(r.id)?.total ?? 0) >= 55
+                              ? 'text-slate-900'
+                              : 'text-slate-500')
+                          }
+                        >
+                          {scoreMap.get(r.id)?.total ?? '–'}
+                        </span>
+                        <span className="text-[10px] text-slate-400">#{idx + 1}</span>
+                      </div>
+                    </td>
+                  )}
                   <td className="px-3 py-2.5 font-medium text-slate-900">
                     <a
                       href={`/on-market/${r.id}`}
@@ -531,7 +578,7 @@ export function OnMarketClient({
             })}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={14} className="px-3 py-16">
+                <td colSpan={s.preset === 'curated' ? 15 : 14} className="px-3 py-16">
                   <div className="mx-auto flex max-w-sm flex-col items-center gap-3 text-center">
                     <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
                       <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

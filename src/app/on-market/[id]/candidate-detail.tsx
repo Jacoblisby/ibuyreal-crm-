@@ -1459,22 +1459,34 @@ function ComparablesPanel({
   subjectKvm: number;
   listPrice: number;
 }) {
+  interface CompSaleData {
+    date: string;
+    amount: number;
+    perAreaPrice: number;
+    address: string;
+    kvm: number;
+    yearBuilt: number | null;
+    postalCode: string;
+    isSelf?: boolean;
+    similarity: number;
+    thesisCategory: 'above-list' | 'validating-fmv' | 'reference';
+  }
   interface CompResp {
     subjectKvm: number;
     subjectPostal: string;
     subjectBydel: string | null;
+    subjectListPpm: number;
+    subjectFmvPpm: number;
     scope: 'postnr' | 'bydel';
     medianPerSqm: number | null;
+    compBasedFmv: number | null;
+    strongCompsMedian: number | null;
+    strongCompsCount: number;
+    aboveListCount: number;
+    validatingCount: number;
     sampleSize: number;
-    sales: Array<{
-      date: string;
-      amount: number;
-      perAreaPrice: number;
-      address: string;
-      kvm: number;
-      yearBuilt: number | null;
-      isSelf: boolean;
-    }>;
+    sales: CompSaleData[];
+    strongComps: CompSaleData[];
   }
   const [data, setData] = useState<CompResp | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1507,54 +1519,111 @@ function ComparablesPanel({
     );
   }
 
-  const subjectPpm = listPrice && subjectKvm > 0 ? listPrice / subjectKvm : 0;
-  const diffFromMedian =
-    data.medianPerSqm && subjectPpm
-      ? ((subjectPpm - data.medianPerSqm) / data.medianPerSqm) * 100
-      : null;
-
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+      {/* HEADER + summary stats */}
+      <div className="mb-4">
         <h3 className="text-[13px] font-semibold tracking-tight text-slate-900">
-          Sammenlignelige handler{' '}
-          <span className="font-normal text-slate-500">
-            ({data.scope === 'postnr'
-              ? `samme postnr ${data.subjectPostal}`
-              : `samme bydel ${data.subjectBydel ?? ''} — udvidet pga. lille postnr`}
-            , ±25% kvm, 5 år)
-          </span>
+          Sammenlignelige handler — bekræfter buy-tesen
         </h3>
-        <span className="text-xs text-slate-500">
-          n={data.sampleSize} · median{' '}
-          <strong className="text-slate-900">
-            {data.medianPerSqm ? formatKr(data.medianPerSqm) : '–'}/m²
-          </strong>
-          {diffFromMedian !== null && (
-            <>
-              {' '}
-              · denne case ligger{' '}
-              <strong
-                className={
-                  diffFromMedian < 0
-                    ? 'text-emerald-700'
-                    : diffFromMedian < 10
-                    ? 'text-slate-900'
-                    : 'text-rose-600'
-                }
-              >
-                {diffFromMedian > 0 ? '+' : ''}
-                {diffFromMedian.toFixed(1)}%
-              </strong>{' '}
-              vs median
-            </>
-          )}
-        </span>
+        <p className="text-xs text-slate-500">
+          {data.scope === 'postnr'
+            ? `Samme postnr ${data.subjectPostal}`
+            : `Samme bydel ${data.subjectBydel ?? ''} (postnr for snæver)`}
+          , ±30% kvm, 5 år · n={data.sampleSize}
+        </p>
       </div>
 
+      {/* STRONG COMPS SUMMARY */}
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <ThesisStat
+          label="Stærke comps"
+          value={String(data.strongCompsCount)}
+          sub="similarity ≥40, sidste 3 år"
+          tone={data.strongCompsCount >= 3 ? 'emerald' : data.strongCompsCount > 0 ? 'amber' : 'rose'}
+        />
+        <ThesisStat
+          label="Solgt ≥ udbudspris/m²"
+          value={String(data.aboveListCount)}
+          sub="beviser at udbud er forhandlelig"
+          tone={data.aboveListCount > 0 ? 'emerald' : 'slate'}
+        />
+        <ThesisStat
+          label="Bekræfter AVM ±15%"
+          value={String(data.validatingCount)}
+          sub="solgt nær vores FMV"
+          tone={data.validatingCount > 0 ? 'emerald' : 'slate'}
+        />
+        <ThesisStat
+          label="Median kr/m² (alle)"
+          value={data.medianPerSqm ? formatKr(data.medianPerSqm) : '–'}
+          sub={
+            data.strongCompsMedian
+              ? `strong median: ${formatKr(data.strongCompsMedian)}/m²`
+              : 'ingen strong comps'
+          }
+          tone="slate"
+        />
+      </div>
+
+      {/* STRONG COMPS LIST — fremhævet */}
+      {data.strongComps.length > 0 && (
+        <div className="mb-4 rounded-lg border border-emerald-200/70 bg-emerald-50/40 p-3">
+          <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-emerald-800">
+            <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+            Stærke comps der bekræfter tesen
+          </div>
+          <table className="w-full text-sm">
+            <thead className="text-left text-[10px] font-medium uppercase tracking-wider text-emerald-700/70">
+              <tr>
+                <th className="px-2 py-1">Dato</th>
+                <th className="px-2 py-1">Adresse</th>
+                <th className="px-2 py-1 text-right">kvm</th>
+                <th className="px-2 py-1 text-right">Bygget</th>
+                <th className="px-2 py-1 text-right">Pris</th>
+                <th className="px-2 py-1 text-right">kr/m²</th>
+                <th className="px-2 py-1 text-right" title="similarity-score 0-100">Sim</th>
+                <th className="px-2 py-1">Kategori</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.strongComps.map((s, i) => (
+                <tr key={i} className="border-t border-emerald-100/80">
+                  <td className="px-2 py-1.5 tabular-nums text-slate-700">{s.date}</td>
+                  <td className="px-2 py-1.5 font-medium text-slate-900">{s.address}</td>
+                  <td className="px-2 py-1.5 text-right tabular-nums">{s.kvm}</td>
+                  <td className="px-2 py-1.5 text-right tabular-nums text-xs text-slate-500">{s.yearBuilt ?? '–'}</td>
+                  <td className="px-2 py-1.5 text-right tabular-nums">{formatKr(s.amount)}</td>
+                  <td className="px-2 py-1.5 text-right tabular-nums font-semibold text-emerald-700">{formatKr(s.perAreaPrice)}</td>
+                  <td className="px-2 py-1.5 text-right tabular-nums text-xs text-slate-500">{s.similarity}</td>
+                  <td className="px-2 py-1.5">
+                    <span
+                      className={
+                        'inline-block rounded-full px-1.5 py-0.5 text-[10px] font-medium ' +
+                        (s.thesisCategory === 'above-list'
+                          ? 'bg-emerald-200 text-emerald-800'
+                          : 'bg-blue-100 text-blue-700')
+                      }
+                    >
+                      {s.thesisCategory === 'above-list' ? '≥ udbud' : 'bekræfter AVM'}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ALL SALES — alle 25 nylige til reference */}
       <div className="overflow-hidden rounded-md border border-slate-100">
+        <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5 text-[10px] font-medium uppercase tracking-wider text-slate-500">
+          Alle nylige handler (reference)
+        </div>
         <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-left text-[11px] font-medium uppercase tracking-wider text-slate-500">
+          <thead className="bg-slate-50/50 text-left text-[11px] font-medium uppercase tracking-wider text-slate-500">
             <tr>
               <th className="px-3 py-2">Dato</th>
               <th className="px-3 py-2">Adresse</th>
@@ -1562,6 +1631,7 @@ function ComparablesPanel({
               <th className="px-3 py-2 text-right">Bygget</th>
               <th className="px-3 py-2 text-right">Pris</th>
               <th className="px-3 py-2 text-right">kr/m²</th>
+              <th className="px-3 py-2 text-right">Sim</th>
             </tr>
           </thead>
           <tbody>
@@ -1570,7 +1640,13 @@ function ComparablesPanel({
                 key={i}
                 className={
                   'border-t border-slate-100 ' +
-                  (s.isSelf ? 'bg-amber-50/40' : 'hover:bg-slate-50/60')
+                  (s.isSelf
+                    ? 'bg-amber-50/40'
+                    : s.thesisCategory === 'above-list'
+                    ? 'bg-emerald-50/30'
+                    : s.thesisCategory === 'validating-fmv'
+                    ? 'bg-blue-50/30'
+                    : 'hover:bg-slate-50/60')
                 }
               >
                 <td className="px-3 py-2 tabular-nums text-slate-600">{s.date}</td>
@@ -1587,14 +1663,50 @@ function ComparablesPanel({
                   {s.yearBuilt ?? '–'}
                 </td>
                 <td className="px-3 py-2 text-right tabular-nums">{formatKr(s.amount)}</td>
-                <td className="px-3 py-2 text-right tabular-nums text-slate-700">
+                <td
+                  className={
+                    'px-3 py-2 text-right tabular-nums font-medium ' +
+                    (s.thesisCategory === 'above-list'
+                      ? 'text-emerald-700'
+                      : s.thesisCategory === 'validating-fmv'
+                      ? 'text-blue-700'
+                      : 'text-slate-700')
+                  }
+                >
                   {formatKr(s.perAreaPrice)}
                 </td>
+                <td className="px-3 py-2 text-right tabular-nums text-xs text-slate-500">{s.similarity}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+function ThesisStat({
+  label,
+  value,
+  sub,
+  tone,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  tone: 'emerald' | 'amber' | 'rose' | 'slate';
+}) {
+  const colors = {
+    emerald: 'border-emerald-200/70 bg-emerald-50/40 text-emerald-900',
+    amber: 'border-amber-200/70 bg-amber-50/40 text-amber-900',
+    rose: 'border-rose-200/70 bg-rose-50/40 text-rose-900',
+    slate: 'border-slate-200 bg-white text-slate-900',
+  } as const;
+  return (
+    <div className={'rounded-lg border p-3 ' + colors[tone]}>
+      <div className="text-[11px] font-medium uppercase tracking-wider opacity-70">{label}</div>
+      <div className="mt-1 text-xl font-bold tabular-nums">{value}</div>
+      <div className="mt-0.5 text-[10px] opacity-60">{sub}</div>
     </div>
   );
 }

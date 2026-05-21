@@ -59,7 +59,7 @@ const PRESET_LABEL: Record<Preset, { label: string; desc: string }> = {
   curated: {
     label: 'Top picks',
     desc:
-      'Hard gate: ≥1 frisk comp (sidste 5 mdr) solgt ≥ udbud/m² · kvm ≤ 100 · ikke stueetage · ikke hjemfaldspligt · ikke 1950-1990 · ikke støjstreets · positiv α · AVM eller manuel FMV. Rangering: composite-score 0-100. Cap: 15.',
+      'Hard gate: median af friske comps (sidste 5 mdr i samme postnr+kvm+byggeår) ≥ udbud/m² · kvm ≤ 100 · ikke stueetage · ikke hjemfaldspligt · ikke 1950-1990 · ikke støjstreets · positiv α · AVM eller manuel FMV. Rangering: composite-score 0-100. Cap: 15.',
   },
   core: {
     label: 'Core picks',
@@ -76,8 +76,8 @@ export function OnMarketClient({
 }: {
   initial: OnMarketCandidate[];
   lastJob: ScrapeJob | null;
-  /** Pre-computed server-side: count af strong-fresh-comps (incl. Resight) per kandidat-ID */
-  strongFreshMap?: Record<string, number>;
+  /** Pre-computed server-side: friske-comp aggregat (count, median, medianAboveList) per kandidat-ID */
+  strongFreshMap?: Record<string, import('@/lib/strongComps').StrongFreshAggregate>;
 }) {
   const router = useRouter();
   const [rows] = useState(initial);
@@ -116,8 +116,8 @@ export function OnMarketClient({
   );
   const curatedIds = useMemo(() => new Set(curatedTop20.map((x) => x.id)), [curatedTop20]);
   const strongFreshMap = useMemo(() => {
-    const m = new Map<string, number>();
-    curatedTop20.forEach((x) => m.set(x.id, x.strongFreshCount));
+    const m = new Map<string, import('@/lib/strongComps').StrongFreshAggregate>();
+    curatedTop20.forEach((x) => m.set(x.id, x.strongFreshAggregate));
     return m;
   }, [curatedTop20]);
   const scoreMap = useMemo(() => {
@@ -506,8 +506,8 @@ export function OnMarketClient({
                   <th className="px-3 py-2.5 text-right" title="Top-pick score 0-100 baseret på AVM, kvalitet, data-freshness, bydel, market signals">
                     Score
                   </th>
-                  <th className="px-3 py-2.5 text-right" title="Antal handler i nær-området sidste 5 mdr solgt ≥ vores udbudspris/m². Hard gate: ≥1 påkrævet for at komme på listen.">
-                    Friske comps
+                  <th className="px-3 py-2.5 text-right" title="Median af friske comps (sidste 5 mdr i samme postnr+kvm+byggeår), vist som % over/under vores udbud. Hard gate: median SKAL være ≥ udbud/m² for at komme på listen.">
+                    Median vs udbud
                   </th>
                 </>
               )}
@@ -561,21 +561,33 @@ export function OnMarketClient({
                       </td>
                       <td className="px-3 py-2.5 text-right">
                         {(() => {
-                          const count = strongFreshMap.get(r.id) ?? 0;
+                          const agg = strongFreshMap.get(r.id);
+                          if (!agg || !agg.medianPpm) {
+                            return <span className="text-xs text-slate-400">–</span>;
+                          }
+                          const listPpm =
+                            r.kvm && r.listPrice ? r.listPrice / r.kvm : 0;
+                          const deltaPct =
+                            listPpm > 0 ? ((agg.medianPpm - listPpm) / listPpm) * 100 : 0;
                           return (
-                            <span
-                              className={
-                                'inline-block min-w-[28px] rounded-md px-2 py-0.5 text-center tabular-nums text-sm font-semibold ' +
-                                (count >= 3
-                                  ? 'bg-emerald-100 text-emerald-800'
-                                  : count >= 1
-                                  ? 'bg-emerald-50 text-emerald-700'
-                                  : 'bg-rose-50 text-rose-700')
-                              }
-                              title={`${count} handel${count === 1 ? '' : 'er'} sidste 5 mdr ≥ vores udbudspris/m²`}
+                            <div
+                              className="flex flex-col items-end"
+                              title={`Median af ${agg.count} friske comps (sidste 5 mdr i samme postnr+kvm+byggeår): ${agg.medianPpm.toLocaleString('da-DK')} kr/m² — ${deltaPct >= 0 ? '+' : ''}${deltaPct.toFixed(1)}% vs vores udbud. ${agg.aboveListCount} af ${agg.count} comps solgt ≥ udbud.`}
                             >
-                              {count}
-                            </span>
+                              <span
+                                className={
+                                  'tabular-nums text-sm font-semibold ' +
+                                  (deltaPct >= 5
+                                    ? 'text-emerald-700'
+                                    : deltaPct >= 0
+                                    ? 'text-emerald-600'
+                                    : 'text-rose-600')
+                                }
+                              >
+                                {deltaPct >= 0 ? '+' : ''}{deltaPct.toFixed(1)}%
+                              </span>
+                              <span className="text-[10px] text-slate-400">n={agg.count}</span>
+                            </div>
                           );
                         })()}
                       </td>

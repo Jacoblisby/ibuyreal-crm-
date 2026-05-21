@@ -152,20 +152,34 @@ export interface ExternalSaleLite {
 }
 
 /**
- * Server-side pre-compute af strong-fresh-comp count per kandidat,
+ * Per-kandidat aggregat: count + median af friske comps i nær-området.
+ *
+ * `count` = antal handler i kvm+byggeår+postnr-bånd sidste N måneder
+ * `medianPpm` = median pr.m² på de comps (uafhængig af udbudspris)
+ * `medianAboveList` = true hvis medianen ≥ subject's udbud/m² (HARD GATE)
+ * `aboveListCount` = antal af comps der individuelt var ≥ udbud (info-felt)
+ */
+export interface StrongFreshAggregate {
+  count: number;
+  medianPpm: number | null;
+  medianAboveList: boolean;
+  aboveListCount: number;
+}
+
+/**
+ * Server-side pre-compute af friske-comp aggregater per kandidat,
  * inkl. både `historicalSales` (internal scrape) og `externalSales` (Resight).
  *
- * Returnerer Map<candidateId, count> — bruges som hard gate i Curated 20.
- * Curation selv kører client-side og har ikke adgang til external_sales,
- * så denne map'er skal pre-computes server-side og passes ned.
+ * Returnerer Map<candidateId, StrongFreshAggregate> — bruges som hard gate
+ * i Top picks: `medianAboveList === true` betyder typisk sale i segmentet
+ * lå over vores udbud, dvs. vi er definitivt under markedet.
  */
 export function computeStrongFreshCompMap(
   candidates: OnMarketCandidate[],
   externalPool: ExternalSaleLite[],
   opts: StrongFreshCompsOpts = {},
-): Record<string, number> {
+): Record<string, StrongFreshAggregate> {
   const monthsBack = opts.monthsBack ?? 5;
-  const abovePct = opts.abovePct ?? 0;
   const kvmTol = opts.kvmTolerance ?? 0.3;
   const yearTol = opts.yearBuiltTolerance ?? 25;
   const now = opts.now ?? new Date();
@@ -184,40 +198,75 @@ export function computeStrongFreshCompMap(
     extByPostnr.set(e.postalCode, arr);
   }
 
-  const out: Record<string, number> = {};
+  // Pre-index internal candidates per postnr for ditto
+  const candByPostnr = new Map<string, OnMarketCandidate[]>();
+  for (const x of candidates) {
+    const arr = candByPostnr.get(x.postalCode) ?? [];
+    arr.push(x);
+    candByPostnr.set(x.postalCode, arr);
+  }
+
+  const out: Record<string, StrongFreshAggregate> = {};
   for (const c of candidates) {
     if (c.status !== 'active') continue;
     if (!c.kvm || !c.listPrice) {
-      out[c.id] = 0;
+      out[c.id] = { count: 0, medianPpm: null, medianAboveList: false, aboveListCount: 0 };
       continue;
     }
     const subjectKvm = c.kvm;
     const subjectListPpm = c.listPrice / subjectKvm;
-    const requiredPpm = subjectListPpm * (1 + abovePct);
     const kvmMin = subjectKvm * (1 - kvmTol);
     const kvmMax = subjectKvm * (1 + kvmTol);
 
-    // 1) Internal — fra findStrongFreshComps
-    let count = findStrongFreshComps(c, candidates, opts).length;
+    const ppms: number[] = [];
 
-    // 2) External (Resight) — samme postnr + kvm-bånd + byggeår ±25 år + ppm ≥ udbud
+    // 1) Internal historicalSales
+    const peersInPostnr = candByPostnr.get(c.postalCode) ?? [];
+    for (const p of peersInPostnr) {
+      if (p.id === c.id) continue;
+      if (!p.kvm || p.kvm < kvmMin || p.kvm > kvmMax) continue;
+      if (c.yearBuilt && p.yearBuilt && Math.abs(p.yearBuilt - c.yearBuilt) > yearTol) continue;
+      const hist = p.historicalSales as Array<{ date: string; amount: number; type: string }> | null;
+      if (!hist) continue;
+      for (const s of hist) {
+        if (s.type !== 'normal') continue;
+        if (s.date < cutoffStr) continue;
+        if (!s.amount || s.amount < 100_000) continue;
+        const ppm = s.amount / p.kvm;
+        if (ppm < 5_000) continue;
+        ppms.push(ppm);
+      }
+    }
+
+    // 2) Resight external_sales
     const extInPostnr = extByPostnr.get(c.postalCode) ?? [];
     for (const e of extInPostnr) {
       if (e.kvm! < kvmMin || e.kvm! > kvmMax) continue;
-      // HARD FILTER: byggeår ±25 år (samme som internal). Mangler byggeår → accept.
-      if (c.yearBuilt && e.yearBuilt && Math.abs(e.yearBuilt - c.yearBuilt) > yearTol) {
-        continue;
-      }
-      const ppm = e.perAreaPrice ?? e.amount / e.kvm!;
-      if (ppm < requiredPpm) continue;
-      // Skip subject's egen historik — dedup-heuristik på adresse
+      if (c.yearBuilt && e.yearBuilt && Math.abs(e.yearBuilt - c.yearBuilt) > yearTol) continue;
+      // Dedup mod subject's egen historik
       const cleanCand = c.address.toLowerCase().replace(/\s+/g, '');
       const cleanExt = e.address.toLowerCase().replace(/\s+/g, '');
       if (cleanExt.startsWith(cleanCand.slice(0, Math.min(15, cleanCand.length)))) continue;
-      count++;
+      const ppm = e.perAreaPrice ?? e.amount / e.kvm!;
+      if (ppm < 5_000) continue;
+      ppms.push(ppm);
     }
 
-    out[c.id] = count;
+    if (ppms.length === 0) {
+      out[c.id] = { count: 0, medianPpm: null, medianAboveList: false, aboveListCount: 0 };
+      continue;
+    }
+
+    ppms.sort((a, b) => a - b);
+    const medianPpm = ppms[Math.floor(ppms.length / 2)];
+    const aboveListCount = ppms.filter((p) => p >= subjectListPpm).length;
+
+    out[c.id] = {
+      count: ppms.length,
+      medianPpm,
+      medianAboveList: medianPpm >= subjectListPpm,
+      aboveListCount,
+    };
   }
   return out;
 }

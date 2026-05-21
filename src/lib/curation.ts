@@ -15,7 +15,7 @@
  */
 import type { OnMarketCandidate } from './db/schema';
 import { isConcreteEra, isGroundFloor, isNoisyStreet } from './quality';
-import { findStrongFreshComps, type StrongFreshComp } from './strongComps';
+import { findStrongFreshComps, type StrongFreshAggregate, type StrongFreshComp } from './strongComps';
 
 export interface ScoreComponents {
   avmSignal: number;
@@ -211,24 +211,20 @@ export function pickCurated(
   candidates: OnMarketCandidate[],
   n = 20,
   opts?: {
-    strongFreshMinCount?: number;
     monthsBack?: number;
-    abovePct?: number;
     /**
-     * Pre-computed strong-fresh-comp count per kandidat-ID (server-side, inkl.
-     * Resight external_sales). Hvis angivet bruges denne i stedet for at
-     * compute fra `candidates` alene — det giver os adgang til ekstern pool
-     * som ikke er i `historicalSales`.
+     * Pre-computed friske-comp aggregat per kandidat-ID (server-side, inkl.
+     * Resight external_sales). HARD GATE: medianAboveList === true,
+     * dvs. medianen af alle friske comps i kvm+byggeår+postnr-båndet
+     * skal være ≥ subject's udbud/m².
      */
-    strongFreshMap?: Record<string, number>;
+    strongFreshMap?: Record<string, StrongFreshAggregate>;
   },
-): Array<OnMarketCandidate & { score: CuratedScore; strongFreshComps: StrongFreshComp[]; strongFreshCount: number }> {
-  const minCount = opts?.strongFreshMinCount ?? 1;
+): Array<OnMarketCandidate & { score: CuratedScore; strongFreshComps: StrongFreshComp[]; strongFreshAggregate: StrongFreshAggregate }> {
   const monthsBack = opts?.monthsBack ?? 5;
-  const abovePct = opts?.abovePct ?? 0;
   const precomputed = opts?.strongFreshMap;
 
-  // Pool for peer-search = alle aktive (incl. dem der ikke nødvendigvis går videre)
+  // Pool for peer-search = alle aktive
   const pool = candidates.filter((c) => c.status === 'active');
 
   const scored = pool
@@ -236,19 +232,32 @@ export function pickCurated(
       (c) =>
         (c.v3FmvSource === 'ibuyreal-avm' || c.v3FmvSource === 'manual') &&
         (c.v3Alpha ?? 0) > 0 &&
-        (c.kvm ?? 999) <= 100 && // hard cap — vi vil ikke have de helt store lejligheder
+        (c.kvm ?? 999) <= 100 &&
         !c.hjemfaldspligt &&
         !isNoisyStreet(c.address) &&
         !isGroundFloor(c.address) &&
         !isConcreteEra(c.yearBuilt),
     )
     .map((c) => {
-      const strongFreshComps = findStrongFreshComps(c, pool, { monthsBack, abovePct });
-      // Foretræk precomputed count (incl. Resight) hvis tilgængelig
-      const strongFreshCount = precomputed?.[c.id] ?? strongFreshComps.length;
-      return { ...c, score: curatedScore(c), strongFreshComps, strongFreshCount };
+      const strongFreshComps = findStrongFreshComps(c, pool, { monthsBack });
+      // Foretræk precomputed aggregat (incl. Resight). Hvis ikke tilgængelig,
+      // fall back til kun internal data.
+      const fallbackAgg: StrongFreshAggregate = {
+        count: strongFreshComps.length,
+        medianPpm:
+          strongFreshComps.length > 0
+            ? [...strongFreshComps].sort((a, b) => a.perAreaPrice - b.perAreaPrice)[
+                Math.floor(strongFreshComps.length / 2)
+              ].perAreaPrice
+            : null,
+        medianAboveList: strongFreshComps.length > 0,
+        aboveListCount: strongFreshComps.length,
+      };
+      const strongFreshAggregate = precomputed?.[c.id] ?? fallbackAgg;
+      return { ...c, score: curatedScore(c), strongFreshComps, strongFreshAggregate };
     })
-    .filter((c) => c.strongFreshCount >= minCount);
+    // HARD GATE: median af friske comps SKAL være ≥ udbud/m²
+    .filter((c) => c.strongFreshAggregate.medianAboveList);
 
   scored.sort((a, b) => b.score.total - a.score.total);
   return scored.slice(0, n);

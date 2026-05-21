@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import type { OnMarketCandidate, ScrapeJob } from '@/lib/db/schema';
 import { formatKr, formatNum, formatPct } from '@/lib/format';
+import { passesQualityFilter } from '@/lib/quality';
 import { BYDEL_LABEL } from '@/lib/status';
 
 type ReviewStatus = 'ny' | 'interesseret' | 'passet' | 'importeret';
@@ -53,7 +54,8 @@ const PRESET_LABEL: Record<Preset, { label: string; desc: string }> = {
   all: { label: 'Alle', desc: 'Vis alle aktive listings' },
   core: {
     label: 'Core picks',
-    desc: 'AVM-coverage · byggeår 1900-1995 · 50-100kvm · dage ≥30 · α 0-30%',
+    desc:
+      'AVM/manuel FMV · 50-100 kvm · dage ≥30 · α 0-30% · ikke stueetage · ikke 1950-1990 · ikke støjstreets',
   },
   fallback: { label: 'Mangler AVM', desc: 'Kun cases hvor modellen ikke kunne predicte' },
 };
@@ -73,29 +75,25 @@ export function OnMarketClient({
   // Beregn preset-counts altid (uafhængigt af andre filtre) til pill-badges
   const activeRows = useMemo(() => rows.filter((x) => x.status === 'active'), [rows]);
 
+  // Single source of truth for "core picks" logic
+  const isCorePick = (x: OnMarketCandidate): boolean =>
+    (x.v3FmvSource === 'ibuyreal-avm' || x.v3FmvSource === 'manual') &&
+    (x.kvm ?? 0) >= 50 &&
+    (x.kvm ?? 0) <= 100 &&
+    (x.daysOnMarket ?? 0) >= 30 &&
+    (x.v3Alpha ?? 0) > 0 &&
+    (x.v3Alpha ?? 0) < 0.3 &&
+    passesQualityFilter({ address: x.address, yearBuilt: x.yearBuilt });
+
   const presetCounts = useMemo(() => {
-    const matches = (preset: Preset) => {
-      if (preset === 'all') return activeRows;
-      if (preset === 'fallback')
-        return activeRows.filter((x) => x.v3FmvSource !== 'ibuyreal-avm' && x.v3FmvSource !== 'manual');
-      // core
-      return activeRows.filter(
-        (x) =>
-          (x.v3FmvSource === 'ibuyreal-avm' || x.v3FmvSource === 'manual') &&
-          (x.yearBuilt ?? 0) >= 1900 &&
-          (x.yearBuilt ?? 9999) <= 1995 &&
-          (x.kvm ?? 0) >= 50 &&
-          (x.kvm ?? 0) <= 100 &&
-          (x.daysOnMarket ?? 0) >= 30 &&
-          (x.v3Alpha ?? 0) > 0 &&
-          (x.v3Alpha ?? 0) < 0.3,
-      );
-    };
     return {
-      all: matches('all').length,
-      core: matches('core').length,
-      fallback: matches('fallback').length,
+      all: activeRows.length,
+      core: activeRows.filter(isCorePick).length,
+      fallback: activeRows.filter(
+        (x) => x.v3FmvSource !== 'ibuyreal-avm' && x.v3FmvSource !== 'manual',
+      ).length,
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeRows]);
 
   const filtered = useMemo(() => {
@@ -103,17 +101,7 @@ export function OnMarketClient({
 
     // Apply preset først
     if (s.preset === 'core') {
-      r = r.filter(
-        (x) =>
-          (x.v3FmvSource === 'ibuyreal-avm' || x.v3FmvSource === 'manual') &&
-          (x.yearBuilt ?? 0) >= 1900 &&
-          (x.yearBuilt ?? 9999) <= 1995 &&
-          (x.kvm ?? 0) >= 50 &&
-          (x.kvm ?? 0) <= 100 &&
-          (x.daysOnMarket ?? 0) >= 30 &&
-          (x.v3Alpha ?? 0) > 0 &&
-          (x.v3Alpha ?? 0) < 0.3,
-      );
+      r = r.filter(isCorePick);
     } else if (s.preset === 'fallback') {
       r = r.filter((x) => x.v3FmvSource !== 'ibuyreal-avm' && x.v3FmvSource !== 'manual');
     }

@@ -78,13 +78,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       );
   }
 
-  // 5-års cutoff for almindelige comps, 3-år for strong comps (vægter recency)
-  const cutoff5y = new Date();
-  cutoff5y.setFullYear(cutoff5y.getFullYear() - 5);
-  const cutoff5yStr = cutoff5y.toISOString().slice(0, 10);
-  const cutoff3y = new Date();
-  cutoff3y.setFullYear(cutoff3y.getFullYear() - 3);
-  const cutoff3yStr = cutoff3y.toISOString().slice(0, 10);
+  // 6-års cutoff for reference, 4-år for strong (vægter recency men holder volume)
+  const cutoff6y = new Date();
+  cutoff6y.setFullYear(cutoff6y.getFullYear() - 6);
+  const cutoff6yStr = cutoff6y.toISOString().slice(0, 10);
+  const cutoff4y = new Date();
+  cutoff4y.setFullYear(cutoff4y.getFullYear() - 4);
+  const cutoff4yStr = cutoff4y.toISOString().slice(0, 10);
 
   function similarity(peer: {
     kvm: number | null;
@@ -158,16 +158,16 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     return sales;
   }
 
-  // Trin 1: prøv postnr med 5-års vindue
+  // Trin 1: prøv postnr med 6-års vindue
   let scope: 'postnr' | 'bydel' = 'postnr';
   let peers = await queryPeers('postnr');
-  let allSales = collectSales(peers, cutoff5yStr);
+  let allSales = collectSales(peers, cutoff6yStr);
 
   // Trin 2: hvis < 5 nylige handler, udvid til bydel
   if (allSales.length < 5 && subjectBydel) {
     scope = 'bydel';
     peers = await queryPeers('bydel');
-    allSales = collectSales(peers, cutoff5yStr);
+    allSales = collectSales(peers, cutoff6yStr);
   }
 
   // Sort by similarity desc, then recency
@@ -181,15 +181,27 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const median = ppmArr.length > 0 ? ppmArr[Math.floor(ppmArr.length / 2)] : null;
   const compBasedFmv = median && subjectKvm > 0 ? Math.round(median * subjectKvm) : null;
 
-  // Strong comps: above-list eller validating-fmv, 3-års vindue, similarity ≥ 40
-  const strongComps = allSales
+  // Strong comps: above-list eller validating-fmv, 4-års vindue, similarity ≥ 30.
+  // Hvis < 3 efter strikt filter, falder vi tilbage til ethvert
+  // above-list/validating uanset similarity (men stadig 4 år).
+  let strongComps = allSales
     .filter(
       (s) =>
-        s.date >= cutoff3yStr &&
-        s.similarity >= 40 &&
+        s.date >= cutoff4yStr &&
+        s.similarity >= 30 &&
         (s.thesisCategory === 'above-list' || s.thesisCategory === 'validating-fmv'),
     )
     .slice(0, 10);
+
+  if (strongComps.length < 3) {
+    strongComps = allSales
+      .filter(
+        (s) =>
+          s.date >= cutoff4yStr &&
+          (s.thesisCategory === 'above-list' || s.thesisCategory === 'validating-fmv'),
+      )
+      .slice(0, 10);
+  }
 
   // Aggregate verdict
   const aboveListCount = allSales.filter((s) => s.thesisCategory === 'above-list').length;

@@ -221,6 +221,31 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
     }
   }
 
+  async function toggleTopPickOverride() {
+    setBusy(true);
+    const next = !c.topPickOverride;
+    const t = toast.loading(next ? 'Pinner til Top picks…' : 'Fjerner pin…');
+    try {
+      const r = await fetch(`/api/on-market/${c.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topPickOverride: next }),
+      });
+      if (!r.ok) throw new Error('Kunne ikke opdatere');
+      const updated = (await r.json()) as OnMarketCandidate;
+      setC(updated);
+      toast.success(
+        next ? 'Pinned — vises altid på Top picks' : 'Pin fjernet',
+        { id: t },
+      );
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Fejl', { id: t });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function toggleHjemfaldspligt() {
     setBusy(true);
     const next = !c.hjemfaldspligt;
@@ -318,8 +343,29 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
 
   return (
     <div className="space-y-4">
-      {/* Pitch-link — én klik til investor-pitch undersiden */}
-      <div className="flex items-center justify-end">
+      {/* Pitch-link + Top picks pin-toggle */}
+      <div className="flex items-center justify-end gap-2">
+        <button
+          onClick={toggleTopPickOverride}
+          disabled={busy}
+          className={
+            'inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium shadow-sm transition-[transform,background-color,box-shadow] duration-150 ease-[var(--ease-out)] active:scale-[0.97] disabled:opacity-50 ' +
+            (c.topPickOverride
+              ? 'border-amber-300 bg-gradient-to-r from-amber-50 to-white text-amber-800 hover:shadow-md'
+              : 'border-slate-200 bg-white text-slate-600 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700')
+          }
+          title={
+            c.topPickOverride
+              ? 'Pinned til Top picks — bypasser auto-gates (beton-æra, α, median-comp). Klik for at fjerne pin.'
+              : 'Tvang inkluder casen på Top picks selv hvis den dumper auto-gates'
+          }
+        >
+          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill={c.topPickOverride ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 17v5" />
+            <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z" />
+          </svg>
+          {c.topPickOverride ? 'Pinned til Top picks' : 'Pin til Top picks'}
+        </button>
         <a
           href={`/on-market/${c.id}/pitch`}
           className="group inline-flex items-center gap-2 rounded-md border border-emerald-200/80 bg-gradient-to-r from-emerald-50 to-white px-3 py-1.5 text-xs font-medium text-emerald-800 shadow-sm transition-[transform,box-shadow] duration-150 ease-[var(--ease-out)] hover:shadow-md active:scale-[0.97]"

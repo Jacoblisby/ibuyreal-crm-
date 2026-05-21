@@ -320,6 +320,13 @@ export const onMarketCandidates = pgTable(
     /** Fri tekst-note om hjemfaldspligt (fx "udløb 2052, kommunal grund") */
     hjemfaldspligtNote: text('hjemfaldspligt_note'),
 
+    /**
+     * Manuel pin-flag: tvang inkluder casen på Top picks selv hvis
+     * den dumper auto-gates (beton-æra, α, median-comp etc.).
+     * Bevarer dog stueetage + hjemfaldspligt + ignored som hard safety.
+     */
+    topPickOverride: boolean('top_pick_override').notNull().default(false),
+
     // Hvis konverteret til Property
     convertedPropertyId: uuid('converted_property_id').references(() => properties.id, {
       onDelete: 'set null',

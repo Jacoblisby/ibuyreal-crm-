@@ -13,6 +13,7 @@ const patchSchema = z.object({
   manualFmvNote: z.string().nullable().optional(),
   hjemfaldspligt: z.boolean().optional(),
   hjemfaldspligtNote: z.string().nullable().optional(),
+  topPickOverride: z.boolean().optional(),
 });
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {

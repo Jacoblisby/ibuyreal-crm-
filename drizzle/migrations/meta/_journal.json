@@ -64,6 +64,13 @@
       "when": 1779364109558,
       "tag": "0008_lethal_goblin_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1779368002884,
+      "tag": "0009_salty_brood",
+      "breakpoints": true
     }
   ]
 }

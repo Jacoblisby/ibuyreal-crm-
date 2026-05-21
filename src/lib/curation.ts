@@ -233,20 +233,25 @@ export function pickCurated(
   const pool = candidates.filter((c) => c.status === 'active');
 
   const scored = pool
+    // Hard SAFETY-gates (kan IKKE bypasses via topPickOverride):
+    // ignored-state, hjemfaldspligt og stueetage. Disse er reelle red flags.
     .filter(
       (c) =>
-        (c.v3FmvSource === 'ibuyreal-avm' || c.v3FmvSource === 'manual') &&
-        (c.v3Alpha ?? 0) > 0 &&
-        (c.kvm ?? 999) <= 100 &&
         !c.hjemfaldspligt &&
-        !isNoisyStreet(c.address) &&
-        !isGroundFloor(c.address) &&
-        !isConcreteEra(c.yearBuilt),
+        !isGroundFloor(c.address),
+    )
+    // Auto-gates: kan bypasses hvis topPickOverride=true (manuel pin).
+    .filter(
+      (c) =>
+        c.topPickOverride ||
+        ((c.v3FmvSource === 'ibuyreal-avm' || c.v3FmvSource === 'manual') &&
+          (c.v3Alpha ?? 0) > 0 &&
+          (c.kvm ?? 999) <= 100 &&
+          !isNoisyStreet(c.address) &&
+          !isConcreteEra(c.yearBuilt)),
     )
     .map((c) => {
       const strongFreshComps = findStrongFreshComps(c, pool, { monthsBack });
-      // Foretræk precomputed aggregat (incl. Resight). Hvis ikke tilgængelig,
-      // fall back til kun internal data.
       const fallbackAgg: StrongFreshAggregate = {
         count: strongFreshComps.length,
         medianPpm:
@@ -261,10 +266,9 @@ export function pickCurated(
       const strongFreshAggregate = precomputed?.[c.id] ?? fallbackAgg;
       return { ...c, score: curatedScore(c), strongFreshComps, strongFreshAggregate };
     })
-    // HARD GATE: median af friske comps ≥ udbud/m² × threshold (default 93%).
-    // Bruger absolut threshold-check ikke pre-computed `medianAboveList`, så
-    // pickCurated kan styre toleranceen uafhængigt af aggregatet.
+    // Median-comp gate: kan også bypasses af topPickOverride.
     .filter((c) => {
+      if (c.topPickOverride) return true;
       const agg = c.strongFreshAggregate;
       if (!agg.medianPpm || !c.kvm || !c.listPrice) return false;
       const listPpm = c.listPrice / c.kvm;

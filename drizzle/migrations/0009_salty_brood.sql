@@ -1,0 +1,1 @@
+ALTER TABLE "on_market_candidates" ADD COLUMN "top_pick_override" boolean DEFAULT false NOT NULL;

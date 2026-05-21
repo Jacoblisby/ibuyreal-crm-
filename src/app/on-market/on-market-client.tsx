@@ -59,7 +59,7 @@ const PRESET_LABEL: Record<Preset, { label: string; desc: string }> = {
   curated: {
     label: 'Top picks',
     desc:
-      'Hard gate: ≥1 frisk comp (sidste 5 mdr) solgt ≥ udbud/m² (vores scrape + Resight tinglysningsdata) · ikke stueetage · ikke 1950-1990 · ikke støjstreets · positiv α · AVM eller manuel FMV. Rangering: composite-score 0-100.',
+      'Hard gate: ≥1 frisk comp (sidste 5 mdr) solgt ≥ udbud/m² · kvm ≤ 90 · ikke stueetage · ikke hjemfaldspligt · ikke 1950-1990 · ikke støjstreets · positiv α · AVM eller manuel FMV. Rangering: composite-score 0-100. Cap: 15.',
   },
   core: {
     label: 'Core picks',
@@ -111,7 +111,7 @@ export function OnMarketClient({
     passesQualityFilter({ address: x.address, yearBuilt: x.yearBuilt });
 
   const curatedTop20 = useMemo(
-    () => pickCurated(activeRows, 20, { strongFreshMap: strongFreshMapServer }),
+    () => pickCurated(activeRows, 15, { strongFreshMap: strongFreshMapServer }),
     [activeRows, strongFreshMapServer],
   );
   const curatedIds = useMemo(() => new Set(curatedTop20.map((x) => x.id)), [curatedTop20]);

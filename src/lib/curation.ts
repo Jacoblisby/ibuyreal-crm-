@@ -236,6 +236,8 @@ export function pickCurated(
       (c) =>
         (c.v3FmvSource === 'ibuyreal-avm' || c.v3FmvSource === 'manual') &&
         (c.v3Alpha ?? 0) > 0 &&
+        (c.kvm ?? 999) <= 90 && // hard cap — vi vil ikke have de helt store lejligheder
+        !c.hjemfaldspligt &&
         !isNoisyStreet(c.address) &&
         !isGroundFloor(c.address) &&
         !isConcreteEra(c.yearBuilt),

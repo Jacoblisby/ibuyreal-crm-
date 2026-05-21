@@ -229,10 +229,16 @@ export async function runScrapeJob(opts: ScrapeRunOptions = {}): Promise<ScrapeR
         await db.insert(onMarketCandidates).values(values);
         newListings++;
       } else {
+        // Bevar 'ignored' — bruger har aktivt markeret denne case som
+        // fjernet. Scrape må kun sætte status tilbage til 'active' hvis
+        // den fx var 'sold' og er kommet tilbage på markedet.
+        const preservedStatus =
+          existing[0].status === 'ignored' ? 'ignored' : values.status;
         await db
           .update(onMarketCandidates)
           .set({
             ...values,
+            status: preservedStatus,
             updatedAt: new Date(),
             soldAt: existing[0].status === 'sold' ? null : undefined,
           })
@@ -241,7 +247,7 @@ export async function runScrapeJob(opts: ScrapeRunOptions = {}): Promise<ScrapeR
       }
     }
 
-    // 5. Mark-sold
+    // 5. Mark-sold (kun aktive der ikke længere ses + ikke manuelt ignored)
     if (seenSlugs.length > 0) {
       const result = await db
         .update(onMarketCandidates)

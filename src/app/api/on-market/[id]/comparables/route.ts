@@ -23,30 +23,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const subjectPostal = subject.postalCode;
   const subjectBydel = subject.bydel;
 
-  // Trin 1: prøv samme postnr (mest precise sammenligning)
-  let scope: 'postnr' | 'bydel' = 'postnr';
-  let peers = await db
-    .select({
-      id: onMarketCandidates.id,
-      address: onMarketCandidates.address,
-      postalCode: onMarketCandidates.postalCode,
-      kvm: onMarketCandidates.kvm,
-      yearBuilt: onMarketCandidates.yearBuilt,
-      historicalSales: onMarketCandidates.historicalSales,
-    })
-    .from(onMarketCandidates)
-    .where(
-      and(
-        eq(onMarketCandidates.postalCode, subjectPostal),
-        isNotNull(onMarketCandidates.historicalSales),
-        sql`${onMarketCandidates.kvm} BETWEEN ${kvmMin} AND ${kvmMax}`,
-      ),
-    );
-
-  // Trin 2: hvis < 3 matches, udvid til hele bydelen
-  if (peers.length < 3 && subjectBydel) {
-    scope = 'bydel';
-    peers = await db
+  async function queryPeers(by: 'postnr' | 'bydel') {
+    return db
       .select({
         id: onMarketCandidates.id,
         address: onMarketCandidates.address,
@@ -58,12 +36,18 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       .from(onMarketCandidates)
       .where(
         and(
-          eq(onMarketCandidates.bydel, subjectBydel),
+          by === 'postnr'
+            ? eq(onMarketCandidates.postalCode, subjectPostal)
+            : eq(onMarketCandidates.bydel, subjectBydel ?? ''),
           isNotNull(onMarketCandidates.historicalSales),
           sql`${onMarketCandidates.kvm} BETWEEN ${kvmMin} AND ${kvmMax}`,
         ),
       );
   }
+
+  // Trin 1: prøv samme postnr (mest precise sammenligning)
+  let scope: 'postnr' | 'bydel' = 'postnr';
+  let peers = await queryPeers('postnr');
 
   // Udflad historik til en flad liste af handler
   const cutoff = new Date();
@@ -80,32 +64,43 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     isSelf: boolean;
   }
 
-  const sales: Sale[] = [];
-  for (const p of peers) {
-    const hist = p.historicalSales as Array<{
-      date: string;
-      amount: number;
-      type: string;
-    }> | null;
-    if (!hist) continue;
-    for (const s of hist) {
-      if (s.type !== 'normal') continue;
-      if (s.date < cutoffStr) continue;
-      if (!s.amount || s.amount < 100_000) continue;
-      const kvm = p.kvm ?? 0;
-      sales.push({
-        date: s.date,
-        amount: s.amount,
-        perAreaPrice: kvm > 0 ? Math.round(s.amount / kvm) : 0,
-        address: p.address,
-        kvm,
-        yearBuilt: p.yearBuilt,
-        isSelf: p.id === id,
-      });
+  function collectSales(peerRows: typeof peers): Sale[] {
+    const sales: Sale[] = [];
+    for (const p of peerRows) {
+      const hist = p.historicalSales as Array<{
+        date: string;
+        amount: number;
+        type: string;
+      }> | null;
+      if (!hist) continue;
+      for (const s of hist) {
+        if (s.type !== 'normal') continue;
+        if (s.date < cutoffStr) continue;
+        if (!s.amount || s.amount < 100_000) continue;
+        const kvm = p.kvm ?? 0;
+        sales.push({
+          date: s.date,
+          amount: s.amount,
+          perAreaPrice: kvm > 0 ? Math.round(s.amount / kvm) : 0,
+          address: p.address,
+          kvm,
+          yearBuilt: p.yearBuilt,
+          isSelf: p.id === id,
+        });
+      }
     }
+    sales.sort((a, b) => (a.date < b.date ? 1 : -1));
+    return sales;
   }
 
-  sales.sort((a, b) => (a.date < b.date ? 1 : -1));
+  let sales = collectSales(peers);
+
+  // Trin 2: hvis < 3 NYLIGE filtrerede handler, udvid til hele bydelen
+  if (sales.length < 3 && subjectBydel) {
+    scope = 'bydel';
+    peers = await queryPeers('bydel');
+    sales = collectSales(peers);
+  }
 
   const ppm = sales.filter((s) => s.perAreaPrice > 0).map((s) => s.perAreaPrice).sort((a, b) => a - b);
   const median = ppm.length > 0 ? ppm[Math.floor(ppm.length / 2)] : null;

@@ -59,7 +59,7 @@ const PRESET_LABEL: Record<Preset, { label: string; desc: string }> = {
   curated: {
     label: 'Top picks',
     desc:
-      'Hard gate: median af friske comps (sidste 3 mdr i samme postnr+kvm+byggeår) ≥ 93% af udbud/m² · kvm ≤ 100 · ikke stueetage · ikke hjemfaldspligt · ikke 1950-1990 · ikke støjstreets · positiv α · AVM eller manuel FMV. Rangering: composite-score 0-100. Cap: 15.',
+      'Hard gate: median af friske comps (sidste 3 mdr i samme postnr+kvm+byggeår) ≥ 93% af udbud/m² · kvm ≤ 100 · stand ≥ 6/10 + 0 deal-breakers (Claude Vision) · ikke stueetage · ikke hjemfaldspligt · ikke 1950-1990 · ikke støjstreets · positiv α · AVM eller manuel FMV. Rangering: composite-score 0-100. Cap: 15.',
   },
   core: {
     label: 'Core picks',

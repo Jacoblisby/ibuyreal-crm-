@@ -248,7 +248,13 @@ export function pickCurated(
           (c.v3Alpha ?? 0) > 0 &&
           (c.kvm ?? 999) <= 100 &&
           !isNoisyStreet(c.address) &&
-          !isConcreteEra(c.yearBuilt)),
+          !isConcreteEra(c.yearBuilt) &&
+          // Stand-gate: hvis vision har kørt, kræv stand ≥ 6 + 0 deal-breakers.
+          // Hvis vision endnu ikke har kørt (null), giv casen pass — gaten
+          // tager først effekt når vi har data.
+          (!c.imageAssessment ||
+            (c.imageAssessment.overall_condition >= 6 &&
+              (c.imageAssessment.deal_breakers?.length ?? 0) === 0))),
     )
     .map((c) => {
       const strongFreshComps = findStrongFreshComps(c, pool, { monthsBack });

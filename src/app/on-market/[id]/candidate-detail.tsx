@@ -221,6 +221,23 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
     }
   }
 
+  async function assessImagesNow() {
+    setBusy(true);
+    const t = toast.loading('Kører Claude Vision på billeder…');
+    try {
+      const r = await fetch(`/api/on-market/${c.id}/assess-images`, { method: 'POST' });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error ?? 'Assessment fejlede');
+      setC(data.candidate);
+      toast.success(`Stand: ${data.assessment.overall_condition.toFixed(1)}/10 — ${data.assessment.renovation_state}`, { id: t });
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Fejl', { id: t });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function toggleTopPickOverride() {
     setBusy(true);
     const next = !c.topPickOverride;
@@ -343,8 +360,22 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
 
   return (
     <div className="space-y-4">
-      {/* Pitch-link + Top picks pin-toggle */}
+      {/* Pitch-link + Top picks pin-toggle + Vision-assess */}
       <div className="flex items-center justify-end gap-2">
+        <button
+          onClick={assessImagesNow}
+          disabled={busy}
+          className="inline-flex items-center gap-1.5 rounded-md border border-violet-200/80 bg-gradient-to-r from-violet-50 to-white px-2.5 py-1.5 text-xs font-medium text-violet-800 shadow-sm transition-[transform,box-shadow] duration-150 ease-[var(--ease-out)] hover:shadow-md active:scale-[0.97] disabled:opacity-50"
+          title="Kør Claude Vision på billederne — vurderer interiørets stand + estimerer refurb-cost"
+        >
+          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+          {c.imageAssessment
+            ? `Stand ${c.imageAssessment.overall_condition.toFixed(1)}/10`
+            : 'Vurdér stand'}
+        </button>
         <button
           onClick={toggleTopPickOverride}
           disabled={busy}

@@ -348,6 +348,105 @@ export default async function PitchPage({ params }: { params: Promise<{ id: stri
         );
       })()}
 
+      {/* Stand-vurdering (Claude Vision) */}
+      {c.imageAssessment && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-3 flex items-baseline justify-between">
+            <h2 className="text-lg font-semibold tracking-tight text-slate-900">
+              Stand-vurdering (Claude Vision)
+            </h2>
+            <span className="text-xs text-slate-400">
+              {c.imageAssessment.images_analyzed} fotos · confidence {(c.imageAssessment.confidence * 100).toFixed(0)}%
+            </span>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className={
+              'rounded-xl p-4 ' +
+              (c.imageAssessment.overall_condition >= 8
+                ? 'bg-emerald-50/40 border border-emerald-200/70'
+                : c.imageAssessment.overall_condition >= 6
+                ? 'bg-emerald-50/30 border border-emerald-100'
+                : c.imageAssessment.overall_condition >= 4
+                ? 'bg-amber-50/40 border border-amber-200'
+                : 'bg-rose-50/40 border border-rose-200/70')
+            }>
+              <div className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
+                Overall stand
+              </div>
+              <div className={
+                'mt-2 text-4xl font-bold tabular-nums tracking-tight ' +
+                (c.imageAssessment.overall_condition >= 8
+                  ? 'text-emerald-700'
+                  : c.imageAssessment.overall_condition >= 6
+                  ? 'text-emerald-600'
+                  : c.imageAssessment.overall_condition >= 4
+                  ? 'text-amber-700'
+                  : 'text-rose-700')
+              }>
+                {c.imageAssessment.overall_condition.toFixed(1)}
+                <span className="ml-1 text-base font-medium text-slate-400">/ 10</span>
+              </div>
+              <div className="mt-1 text-xs text-slate-600">{c.imageAssessment.renovation_state}</div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <div className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
+                Refurb-budget til ready-to-rent
+              </div>
+              <div className="mt-2 text-3xl font-bold tabular-nums tracking-tight text-slate-900">
+                {formatKr(c.imageAssessment.estimated_refurb_cost)}
+              </div>
+              <div className="mt-1 text-xs text-slate-500">
+                {c.imageAssessment.estimated_refurb_cost === 0
+                  ? 'Intet nødvendigt'
+                  : c.imageAssessment.estimated_refurb_cost < 50_000
+                  ? 'Minor refresh'
+                  : c.imageAssessment.estimated_refurb_cost < 200_000
+                  ? 'Targeted upgrade'
+                  : 'Større renovering'}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-xs">
+              <span className="font-medium text-slate-500">Køkken:</span>
+              <span className="text-slate-700">{c.imageAssessment.kitchen.age} · {c.imageAssessment.kitchen.quality}</span>
+              <span className="font-medium text-slate-500">Bad:</span>
+              <span className="text-slate-700">{c.imageAssessment.bathroom.quality}{c.imageAssessment.bathroom.tiles_modern ? ' · moderne fliser' : ''}</span>
+              <span className="font-medium text-slate-500">Gulve:</span>
+              <span className="text-slate-700">{c.imageAssessment.floors}</span>
+              <span className="font-medium text-slate-500">Vinduer:</span>
+              <span className="text-slate-700">{c.imageAssessment.windows}</span>
+              <span className="font-medium text-slate-500">Vægge:</span>
+              <span className="text-slate-700">{c.imageAssessment.walls_ceilings}</span>
+            </div>
+          </div>
+          {(c.imageAssessment.deal_breakers?.length ?? 0) > 0 && (
+            <div className="mt-4 rounded-lg border border-rose-300 bg-rose-50 p-3 text-sm text-rose-900">
+              <div className="font-semibold">⚠ Deal-breakers spottet</div>
+              <ul className="mt-1 list-disc pl-5 text-xs text-rose-800">
+                {c.imageAssessment.deal_breakers.map((d, i) => <li key={i}>{d}</li>)}
+              </ul>
+            </div>
+          )}
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 text-xs">
+            {(c.imageAssessment.strengths?.length ?? 0) > 0 && (
+              <div>
+                <div className="font-medium text-emerald-700">Styrker</div>
+                <ul className="mt-1 list-disc pl-5 text-slate-700">
+                  {c.imageAssessment.strengths.map((s, i) => <li key={i}>{s}</li>)}
+                </ul>
+              </div>
+            )}
+            {(c.imageAssessment.weaknesses?.length ?? 0) > 0 && (
+              <div>
+                <div className="font-medium text-amber-700">Svagheder</div>
+                <ul className="mt-1 list-disc pl-5 text-slate-700">
+                  {c.imageAssessment.weaknesses.map((s, i) => <li key={i}>{s}</li>)}
+                </ul>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ─── BEVIS: friske comps ───────────────────────────────────────── */}
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex items-start justify-between gap-4">

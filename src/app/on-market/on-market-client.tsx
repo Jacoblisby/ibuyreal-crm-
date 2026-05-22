@@ -520,6 +520,7 @@ export function OnMarketClient({
               <th className="px-3 py-2.5 text-right">kr/m²</th>
               <th className="px-3 py-2.5 text-right">Dage</th>
               <th className="px-3 py-2.5 text-right" title="Ejerudgift kr/m²/år. >1200 = høj (mulig restgæld), >1800 = meget høj. <800 = lav.">Ejerudg</th>
+              <th className="px-3 py-2.5 text-right" title="Claude Vision-vurdering af interiør 1-10. Hover for refurb-cost + deal-breakers.">Stand</th>
               <th className="px-3 py-2.5 text-right">FMV</th>
               <th className="px-3 py-2.5 text-right" title="Alpha = (FMV - investeret) / investeret. Positiv = underpriset.">α</th>
               <th className="px-3 py-2.5 text-right" title="Best-case afkast = α + 14.8% beta + Airbnb cf-yield">Best</th>
@@ -648,6 +649,32 @@ export function OnMarketClient({
                     })()}
                   </td>
                   <td className="px-3 py-2.5 text-right tabular-nums text-xs">
+                    {(() => {
+                      const a = r.imageAssessment;
+                      if (!a) return <span className="text-slate-400">–</span>;
+                      const cond = a.overall_condition;
+                      const tone =
+                        cond >= 8
+                          ? 'text-emerald-700 font-semibold'
+                          : cond >= 6
+                          ? 'text-emerald-600'
+                          : cond >= 4
+                          ? 'text-amber-700'
+                          : 'text-rose-700 font-semibold';
+                      const dealBreakers = a.deal_breakers ?? [];
+                      const refurb = a.estimated_refurb_cost ?? 0;
+                      return (
+                        <span
+                          className={'tabular-nums ' + tone}
+                          title={`Stand: ${cond}/10 — ${a.renovation_state}\nRefurb-budget: ${refurb.toLocaleString('da-DK')} kr\nStyrker: ${(a.strengths ?? []).join(', ')}${(a.weaknesses ?? []).length ? '\nSvagheder: ' + (a.weaknesses ?? []).join(', ') : ''}${dealBreakers.length ? '\n\n⚠ DEAL-BREAKERS: ' + dealBreakers.join('; ') : ''}`}
+                        >
+                          {cond.toFixed(1)}
+                          {dealBreakers.length > 0 && <span className="ml-0.5">⚠</span>}
+                        </span>
+                      );
+                    })()}
+                  </td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-xs">
                     {r.v3Fmv ? (
                       <span className="inline-flex items-center gap-1">
                         {formatKr(r.v3Fmv)}
@@ -735,7 +762,7 @@ export function OnMarketClient({
             })}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={s.preset === 'curated' ? 16 : 14} className="px-3 py-16">
+                <td colSpan={s.preset === 'curated' ? 18 : 16} className="px-3 py-16">
                   <div className="mx-auto flex max-w-sm flex-col items-center gap-3 text-center">
                     <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
                       <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

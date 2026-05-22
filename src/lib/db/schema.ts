@@ -327,6 +327,32 @@ export const onMarketCandidates = pgTable(
      */
     topPickOverride: boolean('top_pick_override').notNull().default(false),
 
+    /**
+     * Claude Vision-assessment af interiørets stand baseret på
+     * 6-8 fotos fra Boligsiden. Indeholder overall_condition 1-10,
+     * estimeret refurb-cost, strengths/weaknesses/deal-breakers.
+     * Recomputes kun ved billed-ændring (images-hash change).
+     */
+    imageAssessment: jsonb('image_assessment').$type<{
+      overall_condition: number;
+      renovation_state: string;
+      kitchen: { age: string; quality: string };
+      bathroom: { tiles_modern: boolean; quality: string };
+      floors: string;
+      windows: string;
+      walls_ceilings: string;
+      estimated_refurb_cost: number;
+      strengths: string[];
+      weaknesses: string[];
+      deal_breakers: string[];
+      confidence: number;
+      images_analyzed: number;
+      model: string;
+    }>(),
+    imageAssessmentAt: timestamp('image_assessment_at', { withTimezone: true }),
+    /** Hash af images-arrayet — bruges til at detektere om reassess er nødvendig */
+    imageAssessmentHash: text('image_assessment_hash'),
+
     // Hvis konverteret til Property
     convertedPropertyId: uuid('converted_property_id').references(() => properties.id, {
       onDelete: 'set null',

@@ -3,6 +3,7 @@ import { externalSales, onMarketCandidates, scrapeJobs } from '@/lib/db/schema';
 import { desc, gte } from 'drizzle-orm';
 import { OnMarketClient } from './on-market-client';
 import { computeStrongFreshCompMap } from '@/lib/strongComps';
+import { computeCalibration } from '@/lib/avmCalibration';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'On-market — iBuyReal' };
@@ -40,6 +41,10 @@ export default async function OnMarketPage() {
     monthsBack: 3,
   });
 
+  // AVM-kalibrering: brug nuværende cases' AVM vs comp-median for at
+  // beregne systematic bias. Genberegnes hver page-load (cheap).
+  const calibration = computeCalibration(rows, strongFreshMap);
+
   const [lastJob] = await db
     .select()
     .from(scrapeJobs)
@@ -60,6 +65,7 @@ export default async function OnMarketPage() {
         initial={rows}
         lastJob={lastJob ?? null}
         strongFreshMap={strongFreshMap}
+        calibration={calibration}
       />
     </div>
   );

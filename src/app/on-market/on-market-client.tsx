@@ -73,11 +73,14 @@ export function OnMarketClient({
   initial,
   lastJob,
   strongFreshMap: strongFreshMapServer,
+  calibration,
 }: {
   initial: OnMarketCandidate[];
   lastJob: ScrapeJob | null;
   /** Pre-computed server-side: friske-comp aggregat (count, median, medianAboveList) per kandidat-ID */
   strongFreshMap?: Record<string, import('@/lib/strongComps').StrongFreshAggregate>;
+  /** Server-computed AVM-kalibreringsfaktorer */
+  calibration?: import('@/lib/avmCalibration').CalibrationFactors;
 }) {
   const router = useRouter();
   const [rows] = useState(initial);
@@ -111,8 +114,12 @@ export function OnMarketClient({
     passesQualityFilter({ address: x.address, yearBuilt: x.yearBuilt });
 
   const curatedTop20 = useMemo(
-    () => pickCurated(activeRows, 15, { strongFreshMap: strongFreshMapServer }),
-    [activeRows, strongFreshMapServer],
+    () =>
+      pickCurated(activeRows, 15, {
+        strongFreshMap: strongFreshMapServer,
+        calibration,
+      }),
+    [activeRows, strongFreshMapServer, calibration],
   );
   const curatedIds = useMemo(() => new Set(curatedTop20.map((x) => x.id)), [curatedTop20]);
   const strongFreshMap = useMemo(() => {
@@ -326,6 +333,41 @@ export function OnMarketClient({
           {PRESET_LABEL[s.preset].desc}
         </span>
       </div>
+
+      {/* AVM-kalibreringsbanner — vises kun for Top picks */}
+      {s.preset === 'curated' && calibration && calibration.nGlobal >= 5 && (
+        <div className="rounded-lg border border-blue-200/60 bg-blue-50/40 p-3 text-xs">
+          <div className="flex items-center gap-2">
+            <svg className="h-3.5 w-3.5 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="20" x2="12" y2="10" />
+              <line x1="18" y1="20" x2="18" y2="4" />
+              <line x1="6" y1="20" x2="6" y2="16" />
+            </svg>
+            <span className="font-semibold text-blue-900">
+              AVM-kalibrering aktiv:
+              {' '}
+              <span className="tabular-nums">
+                {calibration.global >= 1
+                  ? `+${((calibration.global - 1) * 100).toFixed(1)}%`
+                  : `${((calibration.global - 1) * 100).toFixed(1)}%`}
+              </span>
+              {' '}global justering
+            </span>
+            <span className="text-blue-700/70">
+              · n={calibration.nGlobal} cases
+              {Object.keys(calibration.byBydel).length > 0 &&
+                ` · ${Object.keys(calibration.byBydel).length} bydele har egen faktor`}
+            </span>
+          </div>
+          <div className="mt-1 text-blue-700/80">
+            {calibration.global < 0.97
+              ? `AVM overshooter typisk ${((1 - calibration.global) * 100).toFixed(1)}% vs comp-median. Alle Top picks-α er nedjusteret.`
+              : calibration.global > 1.03
+              ? `AVM undershooter typisk ${((calibration.global - 1) * 100).toFixed(1)}% vs comp-median. Alle Top picks-α er opjusteret.`
+              : 'AVM matcher comp-median tæt — minimal justering.'}
+          </div>
+        </div>
+      )}
 
       {/* Score-forklaring — vises kun for Top picks */}
       {s.preset === 'curated' && (

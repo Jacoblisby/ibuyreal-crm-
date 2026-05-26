@@ -16,6 +16,12 @@
 import type { OnMarketCandidate } from './db/schema';
 import { isConcreteEra, isGroundFloor, isNoisyStreet } from './quality';
 import { findStrongFreshComps, type StrongFreshAggregate, type StrongFreshComp } from './strongComps';
+import {
+  applyCalibration,
+  computeConfidence,
+  type CalibrationFactors,
+  type ConfidenceLevel,
+} from './avmCalibration';
 
 export interface ScoreComponents {
   avmSignal: number;
@@ -214,8 +220,7 @@ export function pickCurated(
     monthsBack?: number;
     /**
      * Hvor langt UNDER udbud/m² medianen må ligge før gaten dropper casen.
-     * Default 0.93 = 7% tolerance. Sat så cases som markedet er marginalt
-     * uenig med (men hvor AVM stadig siger underpriced) ikke straffes hårdt.
+     * Default 0.93 = 7% tolerance.
      */
     medianThreshold?: number;
     /**
@@ -223,11 +228,33 @@ export function pickCurated(
      * Resight external_sales). HARD GATE: medianPpm ≥ subjectListPpm × threshold.
      */
     strongFreshMap?: Record<string, StrongFreshAggregate>;
+    /**
+     * AVM-kalibrering pre-computed server-side. Bruges til at justere alpha
+     * efter observeret bias mod comp-median.
+     */
+    calibration?: CalibrationFactors;
+    /**
+     * Drop cases hvor confidence er 'low' fra Top picks. Default true.
+     * topPickOverride bypasser fortsat.
+     */
+    requireConfidence?: boolean;
   },
-): Array<OnMarketCandidate & { score: CuratedScore; strongFreshComps: StrongFreshComp[]; strongFreshAggregate: StrongFreshAggregate }> {
+): Array<
+  OnMarketCandidate & {
+    score: CuratedScore;
+    strongFreshComps: StrongFreshComp[];
+    strongFreshAggregate: StrongFreshAggregate;
+    calibratedFmv: number | null;
+    calibratedAlpha: number | null;
+    confidence: ConfidenceLevel;
+    confidenceReason: string;
+  }
+> {
   const monthsBack = opts?.monthsBack ?? 3;
   const medianThreshold = opts?.medianThreshold ?? 0.93;
   const precomputed = opts?.strongFreshMap;
+  const calibration = opts?.calibration;
+  const requireConfidence = opts?.requireConfidence ?? true;
 
   // Pool for peer-search = alle aktive
   const pool = candidates.filter((c) => c.status === 'active');
@@ -270,7 +297,30 @@ export function pickCurated(
         aboveListCount: strongFreshComps.length,
       };
       const strongFreshAggregate = precomputed?.[c.id] ?? fallbackAgg;
-      return { ...c, score: curatedScore(c), strongFreshComps, strongFreshAggregate };
+
+      // Kalibrér AVM
+      const calResult = calibration
+        ? applyCalibration(c, calibration)
+        : { calibratedFmv: c.v3Fmv, factor: 1, scope: 'none' as const };
+      const calibratedFmv = calResult.calibratedFmv;
+      const calibratedAlpha =
+        calibratedFmv && c.listPrice
+          ? (calibratedFmv - c.listPrice) / c.listPrice
+          : null;
+
+      // Confidence-score
+      const conf = computeConfidence(c, strongFreshAggregate);
+
+      return {
+        ...c,
+        score: curatedScore(c),
+        strongFreshComps,
+        strongFreshAggregate,
+        calibratedFmv,
+        calibratedAlpha,
+        confidence: conf.level,
+        confidenceReason: conf.reason,
+      };
     })
     // Median-comp gate: kan også bypasses af topPickOverride.
     .filter((c) => {
@@ -279,6 +329,18 @@ export function pickCurated(
       if (!agg.medianPpm || !c.kvm || !c.listPrice) return false;
       const listPpm = c.listPrice / c.kvm;
       return agg.medianPpm >= listPpm * medianThreshold;
+    })
+    // Confidence-gate: drop low-confidence cases (kan bypasses af topPickOverride).
+    .filter((c) => {
+      if (c.topPickOverride) return true;
+      if (!requireConfidence) return true;
+      return c.confidence !== 'low' && c.confidence !== 'none';
+    })
+    // Kalibreret α skal også være positiv (efter AVM-bias-justering).
+    .filter((c) => {
+      if (c.topPickOverride) return true;
+      if (c.calibratedAlpha === null) return true;
+      return c.calibratedAlpha > -0.02; // 2% tolerance for kalibrerings-støj
     });
 
   scored.sort((a, b) => b.score.total - a.score.total);

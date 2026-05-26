@@ -59,7 +59,7 @@ const PRESET_LABEL: Record<Preset, { label: string; desc: string }> = {
   curated: {
     label: 'Top picks',
     desc:
-      'Hard gate: median af friske comps (sidste 3 mdr i samme postnr+kvm+byggeår) ≥ 93% af udbud/m² · kvm ≤ 100 · stand ≥ 6/10 + 0 deal-breakers (Claude Vision) · ikke stueetage · ikke hjemfaldspligt · ikke 1950-1990 · ikke støjstreets · positiv α · AVM eller manuel FMV. Rangering: composite-score 0-100. Cap: 15.',
+      'Cases hvor friske handler i samme område bekræfter et godt køb. Ingen stueetage, ingen hjemfald, ingen 1950–1990 betonejendomme, ingen støjgader, lejligheden i god stand.',
   },
   core: {
     label: 'Core picks',
@@ -334,86 +334,9 @@ export function OnMarketClient({
         </span>
       </div>
 
-      {/* AVM-kalibreringsbanner — vises kun for Top picks */}
-      {s.preset === 'curated' && calibration && calibration.nGlobal >= 5 && (
-        <div className="rounded-lg border border-blue-200/60 bg-blue-50/40 p-3 text-xs">
-          <div className="flex items-center gap-2">
-            <svg className="h-3.5 w-3.5 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="12" y1="20" x2="12" y2="10" />
-              <line x1="18" y1="20" x2="18" y2="4" />
-              <line x1="6" y1="20" x2="6" y2="16" />
-            </svg>
-            <span className="font-semibold text-blue-900">
-              AVM-kalibrering aktiv:
-              {' '}
-              <span className="tabular-nums">
-                {calibration.global >= 1
-                  ? `+${((calibration.global - 1) * 100).toFixed(1)}%`
-                  : `${((calibration.global - 1) * 100).toFixed(1)}%`}
-              </span>
-              {' '}global justering
-            </span>
-            <span className="text-blue-700/70">
-              · n={calibration.nGlobal} cases
-              {Object.keys(calibration.byBydel).length > 0 &&
-                ` · ${Object.keys(calibration.byBydel).length} bydele har egen faktor`}
-            </span>
-          </div>
-          <div className="mt-1 text-blue-700/80">
-            {calibration.global < 0.97
-              ? `AVM overshooter typisk ${((1 - calibration.global) * 100).toFixed(1)}% vs comp-median. Alle Top picks-α er nedjusteret.`
-              : calibration.global > 1.03
-              ? `AVM undershooter typisk ${((calibration.global - 1) * 100).toFixed(1)}% vs comp-median. Alle Top picks-α er opjusteret.`
-              : 'AVM matcher comp-median tæt — minimal justering.'}
-          </div>
-        </div>
-      )}
-
-      {/* Score-forklaring — vises kun for Top picks */}
+      {/* Top picks — kort-layout (erstatter tabel-kompleksiteten) */}
       {s.preset === 'curated' && (
-        <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3 text-xs">
-          <div className="mb-2 flex items-center gap-2">
-            <svg className="h-3.5 w-3.5 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" />
-              <line x1="12" y1="16" x2="12" y2="12" />
-              <line x1="12" y1="8" x2="12.01" y2="8" />
-            </svg>
-            <span className="font-semibold text-slate-700">
-              Score er 0–100 — sum af 5 komponenter
-            </span>
-            <span className="text-slate-400">(hover en score i tabellen for case-specifik rationale)</span>
-          </div>
-          <div className="grid grid-cols-1 gap-x-4 gap-y-1.5 sm:grid-cols-2 lg:grid-cols-5">
-            <ScoreLegendItem
-              max={25}
-              label="AVM signal"
-              desc="AVM/manuel FMV-coverage + realistisk alpha (5–20% sweet spot)"
-            />
-            <ScoreLegendItem
-              max={25}
-              label="Kvalitet"
-              desc="Moderne byggeri (>2000 best), ikke beton 1950–1990, ikke stuen, ikke støjgade"
-            />
-            <ScoreLegendItem
-              max={20}
-              label="Data freshness"
-              desc="Recent sale + realistisk seller-CAGR (4–8% pa sweet spot)"
-            />
-            <ScoreLegendItem
-              max={15}
-              label="Bydel attractiveness"
-              desc="Tier A (Indre By/Frb/Østerbro) > Tier B (Vesterbro/Nørrebro) > Tier C (Amager)"
-            />
-            <ScoreLegendItem
-              max={15}
-              label="Market signals"
-              desc="Sweet-spot dage på marked (30–150) + realistisk best-afkast (18–35%)"
-            />
-          </div>
-          <div className="mt-2 border-t border-slate-200 pt-2 text-slate-500">
-            <strong className="text-slate-700">≥70</strong> = strong pick · <strong className="text-slate-700">55–69</strong> = solid · <strong className="text-slate-700">&lt;55</strong> = grænse-case
-          </div>
-        </div>
+        <TopPicksCards cases={curatedTop20} />
       )}
 
       {/* Filter bar — grouped + sticky */}
@@ -537,22 +460,13 @@ export function OnMarketClient({
         </div>
       </div>
 
-      {/* Tabel */}
+      {/* Tabel — kun for andre presets end Top picks (Top picks bruger cards ovenover) */}
+      {s.preset !== 'curated' && (
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="border-b border-slate-200 bg-slate-50/80 text-left text-[11px] font-medium uppercase tracking-wider text-slate-500">
             <tr>
-              {s.preset === 'curated' && (
-                <>
-                  <th className="px-3 py-2.5 text-right" title="Top-pick score 0-100 baseret på AVM, kvalitet, data-freshness, bydel, market signals">
-                    Score
-                  </th>
-                  <th className="px-3 py-2.5 text-right" title="Median af friske comps (sidste 3 mdr i samme postnr+kvm+byggeår), vist som % over/under vores udbud. Hard gate: median ≥ 93% af udbud/m² for at komme på listen.">
-                    Median vs udbud
-                  </th>
-                </>
-              )}
               <th className="px-3 py-2.5">Adresse</th>
               <th className="px-3 py-2.5">Bydel</th>
               <th className="px-3 py-2.5 text-right">kvm</th>
@@ -581,62 +495,6 @@ export function OnMarketClient({
                   className="row-stagger group border-b border-slate-100 transition-colors duration-100 ease-[var(--ease-out)] last:border-0 hover:bg-slate-50"
                   style={{ animationDelay: `${Math.min(idx, 12) * 25}ms` }}
                 >
-                  {s.preset === 'curated' && (
-                    <>
-                      <td className="px-3 py-2.5 text-right">
-                        <div
-                          className="inline-flex flex-col items-end"
-                          title={(scoreMap.get(r.id)?.rationale ?? []).join('\n') + '\n\n' + (scoreMap.get(r.id)?.redFlags.map((f) => '⚠ ' + f).join('\n') ?? '')}
-                        >
-                          <span
-                            className={
-                              'tabular-nums text-base font-bold ' +
-                              ((scoreMap.get(r.id)?.total ?? 0) >= 70
-                                ? 'text-emerald-700'
-                                : (scoreMap.get(r.id)?.total ?? 0) >= 55
-                                ? 'text-slate-900'
-                                : 'text-slate-500')
-                            }
-                          >
-                            {scoreMap.get(r.id)?.total ?? '–'}
-                          </span>
-                          <span className="text-[10px] text-slate-400">#{idx + 1}</span>
-                        </div>
-                      </td>
-                      <td className="px-3 py-2.5 text-right">
-                        {(() => {
-                          const agg = strongFreshMap.get(r.id);
-                          if (!agg || !agg.medianPpm) {
-                            return <span className="text-xs text-slate-400">–</span>;
-                          }
-                          const listPpm =
-                            r.kvm && r.listPrice ? r.listPrice / r.kvm : 0;
-                          const deltaPct =
-                            listPpm > 0 ? ((agg.medianPpm - listPpm) / listPpm) * 100 : 0;
-                          return (
-                            <div
-                              className="flex flex-col items-end"
-                              title={`Median af ${agg.count} friske comps (sidste 5 mdr i samme postnr+kvm+byggeår): ${agg.medianPpm.toLocaleString('da-DK')} kr/m² — ${deltaPct >= 0 ? '+' : ''}${deltaPct.toFixed(1)}% vs vores udbud. ${agg.aboveListCount} af ${agg.count} comps solgt ≥ udbud.`}
-                            >
-                              <span
-                                className={
-                                  'tabular-nums text-sm font-semibold ' +
-                                  (deltaPct >= 5
-                                    ? 'text-emerald-700'
-                                    : deltaPct >= 0
-                                    ? 'text-emerald-600'
-                                    : 'text-rose-600')
-                                }
-                              >
-                                {deltaPct >= 0 ? '+' : ''}{deltaPct.toFixed(1)}%
-                              </span>
-                              <span className="text-[10px] text-slate-400">n={agg.count}</span>
-                            </div>
-                          );
-                        })()}
-                      </td>
-                    </>
-                  )}
                   <td className="px-3 py-2.5 font-medium text-slate-900">
                     <a
                       href={`/on-market/${r.id}`}
@@ -804,7 +662,7 @@ export function OnMarketClient({
             })}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={s.preset === 'curated' ? 18 : 16} className="px-3 py-16">
+                <td colSpan={16} className="px-3 py-16">
                   <div className="mx-auto flex max-w-sm flex-col items-center gap-3 text-center">
                     <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
                       <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -830,6 +688,7 @@ export function OnMarketClient({
         </table>
         </div>
       </div>
+      )}
     </div>
   );
 }
@@ -853,5 +712,188 @@ function ScoreLegendItem({
       </div>
       <p className="mt-0.5 text-[10.5px] leading-tight text-slate-500">{desc}</p>
     </div>
+  );
+}
+
+// ─── Top Picks Cards — fokuseret layout uden jargon ──────────────────────
+type TopPickCase = ReturnType<typeof pickCurated>[number];
+
+function TopPicksCards({ cases }: { cases: TopPickCase[] }) {
+  if (cases.length === 0) {
+    return (
+      <div className="rounded-xl border border-slate-200 bg-white p-12 text-center text-sm text-slate-500">
+        Ingen cases passerer Top picks-gates lige nu. Scrape Boligsiden eller juster filtre.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="px-1 text-sm text-slate-600">
+        <span className="font-semibold text-slate-900">{cases.length} cases</span>
+        <span className="text-slate-400"> · sorteret efter samlet vurdering. Vores estimat = AVM justeret efter hvad markedet faktisk betaler for lignende lejligheder.</span>
+      </div>
+      {cases.map((c, idx) => (
+        <TopPickCard key={c.id} c={c} rank={idx + 1} />
+      ))}
+    </div>
+  );
+}
+
+function TopPickCard({ c, rank }: { c: TopPickCase; rank: number }) {
+  const estimat = c.calibratedFmv ?? c.v3Fmv ?? 0;
+  const listPrice = c.listPrice ?? 0;
+  const upsidePct = listPrice > 0 ? ((estimat - listPrice) / listPrice) * 100 : 0;
+  const upsideKr = estimat - listPrice;
+  const listPpm = c.kvm && listPrice ? listPrice / c.kvm : 0;
+  const estimatPpm = c.kvm && estimat ? estimat / c.kvm : 0;
+
+  // Bevis-styrke: kombiner antal comps + stand
+  const stand = c.imageAssessment?.overall_condition ?? null;
+  const compCount = c.strongFreshAggregate?.count ?? 0;
+  let bevis: { color: string; label: string; sub: string };
+  if (compCount >= 10 && (stand === null || stand >= 7)) {
+    bevis = {
+      color: 'emerald',
+      label: 'Stærkt bevis',
+      sub: `${compCount} friske handler bekræfter${stand ? ` · stand ${stand}/10` : ''}`,
+    };
+  } else if (compCount >= 5 || (stand !== null && stand >= 6)) {
+    bevis = {
+      color: 'amber',
+      label: 'OK bevis',
+      sub: `${compCount} friske handler${stand ? ` · stand ${stand}/10` : ''}`,
+    };
+  } else {
+    bevis = {
+      color: 'slate',
+      label: 'Tyndt bevis',
+      sub: `Kun ${compCount} friske handler${stand ? ` · stand ${stand}/10` : ''}`,
+    };
+  }
+
+  const bydel = c.bydel ? c.bydel.replace('-', ' ').replace('oe', 'ø').replace('aer', 'ær') : 'København';
+
+  return (
+    <a
+      href={`/on-market/${c.id}`}
+      className="row-stagger group block rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-[box-shadow,border-color,transform] duration-150 ease-[var(--ease-out)] hover:border-slate-300 hover:shadow-md active:scale-[0.998]"
+      style={{ animationDelay: `${Math.min(rank, 12) * 30}ms` }}
+    >
+      <div className="flex items-start justify-between gap-4">
+        {/* Venstre: rank + adresse */}
+        <div className="flex items-start gap-3">
+          <span className="mt-1 flex h-7 w-7 flex-none items-center justify-center rounded-full bg-slate-100 text-[11px] font-semibold tabular-nums text-slate-600">
+            #{rank}
+          </span>
+          <div>
+            <h3 className="text-base font-semibold tracking-tight text-slate-900 group-hover:text-blue-700">
+              {c.address}
+              {c.topPickOverride && (
+                <span className="ml-2 inline-block rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
+                  📌 pinned
+                </span>
+              )}
+            </h3>
+            <p className="mt-0.5 text-xs text-slate-500">
+              {c.postalCode} {bydel} · {c.kvm} m² · {c.rooms ?? '?'} vær.
+              {c.yearBuilt ? ` · opført ${c.yearBuilt}` : ''}
+              {c.daysOnMarket ? ` · ${c.daysOnMarket} dage på marked` : ''}
+            </p>
+          </div>
+        </div>
+
+        {/* Højre: bevis-badge */}
+        <div
+          className={
+            'flex-none rounded-md px-2.5 py-1 text-right ' +
+            (bevis.color === 'emerald'
+              ? 'bg-emerald-50 text-emerald-800'
+              : bevis.color === 'amber'
+              ? 'bg-amber-50 text-amber-800'
+              : 'bg-slate-50 text-slate-600')
+          }
+        >
+          <div className="text-[11px] font-semibold">
+            {bevis.color === 'emerald' && '🟢 '}
+            {bevis.color === 'amber' && '🟡 '}
+            {bevis.color === 'slate' && '⚪ '}
+            {bevis.label}
+          </div>
+          <div className="text-[10px] opacity-75">{bevis.sub}</div>
+        </div>
+      </div>
+
+      {/* Midten: udbud → vores estimat → upside */}
+      <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-[1fr_1fr_1.2fr]">
+        <div>
+          <div className="text-[10px] font-medium uppercase tracking-wider text-slate-400">
+            Udbud
+          </div>
+          <div className="mt-1 text-xl font-bold tabular-nums tracking-tight text-slate-900">
+            {formatKr(listPrice)}
+          </div>
+          <div className="mt-0.5 text-[11px] tabular-nums text-slate-400">
+            {Math.round(listPpm).toLocaleString('da-DK')} kr/m²
+          </div>
+        </div>
+
+        <div>
+          <div className="text-[10px] font-medium uppercase tracking-wider text-slate-400">
+            Vores estimat
+          </div>
+          <div className="mt-1 text-xl font-bold tabular-nums tracking-tight text-slate-900">
+            {formatKr(estimat)}
+          </div>
+          <div className="mt-0.5 text-[11px] tabular-nums text-slate-400">
+            {Math.round(estimatPpm).toLocaleString('da-DK')} kr/m²
+          </div>
+        </div>
+
+        <div
+          className={
+            'rounded-lg p-3 ' +
+            (upsidePct >= 5
+              ? 'bg-emerald-50/60'
+              : upsidePct >= 0
+              ? 'bg-emerald-50/30'
+              : 'bg-rose-50/40')
+          }
+        >
+          <div
+            className={
+              'text-[10px] font-medium uppercase tracking-wider ' +
+              (upsidePct >= 0 ? 'text-emerald-700' : 'text-rose-700')
+            }
+          >
+            {upsidePct >= 0 ? 'Upside' : 'Negativ'}
+          </div>
+          <div
+            className={
+              'mt-1 text-2xl font-bold tabular-nums tracking-tight ' +
+              (upsidePct >= 0 ? 'text-emerald-700' : 'text-rose-700')
+            }
+          >
+            {upsidePct >= 0 ? '+' : ''}
+            {upsidePct.toFixed(1)}%
+          </div>
+          <div
+            className={
+              'mt-0.5 text-[11px] tabular-nums ' +
+              (upsidePct >= 0 ? 'text-emerald-700/70' : 'text-rose-700/70')
+            }
+          >
+            {upsideKr >= 0 ? '+' : ''}
+            {formatKr(upsideKr)}
+          </div>
+        </div>
+      </div>
+
+      {/* Bund: link-cue */}
+      <div className="mt-3 flex items-center justify-end text-xs text-slate-400 transition-colors duration-150 ease-[var(--ease-out)] group-hover:text-blue-600">
+        Se hele casen
+        <span className="ml-1 transition-transform duration-150 ease-[var(--ease-out)] group-hover:translate-x-0.5">→</span>
+      </div>
+    </a>
   );
 }

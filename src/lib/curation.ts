@@ -335,12 +335,6 @@ export function pickCurated(
       if (c.topPickOverride) return true;
       if (!requireConfidence) return true;
       return c.confidence !== 'low' && c.confidence !== 'none';
-    })
-    // Kalibreret α skal også være positiv (efter AVM-bias-justering).
-    .filter((c) => {
-      if (c.topPickOverride) return true;
-      if (c.calibratedAlpha === null) return true;
-      return c.calibratedAlpha > -0.02; // 2% tolerance for kalibrerings-støj
     });
 
   scored.sort((a, b) => b.score.total - a.score.total);

@@ -741,7 +741,9 @@ function TopPicksCards({ cases }: { cases: TopPickCase[] }) {
 }
 
 function TopPickCard({ c, rank }: { c: TopPickCase; rank: number }) {
-  const estimat = c.calibratedFmv ?? c.v3Fmv ?? 0;
+  // Vis rå AVM (eller manuel FMV) — ingen justering. Det er hvad modellen siger,
+  // og det vil bruger se direkte.
+  const estimat = c.v3Fmv ?? 0;
   const listPrice = c.listPrice ?? 0;
   const upsidePct = listPrice > 0 ? ((estimat - listPrice) / listPrice) * 100 : 0;
   const upsideKr = estimat - listPrice;

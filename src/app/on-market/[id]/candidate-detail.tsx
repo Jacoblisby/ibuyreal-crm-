@@ -4,6 +4,8 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { curatedScore } from '@/lib/curation';
+import { diagnoseCase, summarizeDiagnosis } from '@/lib/diagnose';
+import { DiagnoseChips } from '@/components/DiagnoseChips';
 import {
   calculateProperty,
   getRoomFactor,
@@ -413,6 +415,9 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
 
       {/* JP Morgan-grade hero: curated score + rationale + red flags */}
       <CuratedHero score={score} />
+
+      {/* Diagnose-modul — chips med pass/warn/fail per dimension */}
+      <DiagnoseSection c={c} />
 
       {/* FMV-status banner */}
       {c.v3FmvSource === 'manual' ? (
@@ -2236,6 +2241,60 @@ function FmvCard({
         </div>
       )}
       <div className="mt-1 text-[10px] text-slate-400">{sub}</div>
+    </div>
+  );
+}
+
+// ─── DiagnoseSection — modul med pass/warn/fail chips ──────────────────────
+function DiagnoseSection({ c }: { c: OnMarketCandidate }) {
+  // Henter friske comps via client-side aggregate (vi har ikke server-map her;
+  // chips virker fint uden — comp-relateret flag skjules bare). For fuld
+  // signal-styrke se Top picks-listen som har strongFreshMap fra server.
+  const flags = diagnoseCase(c);
+  const sum = summarizeDiagnosis(flags);
+
+  const verdictColor =
+    sum.verdict === 'strong' ? 'emerald'
+    : sum.verdict === 'ok' ? 'amber'
+    : 'rose';
+  const verdictLabel =
+    sum.verdict === 'strong' ? 'Stærk case'
+    : sum.verdict === 'ok' ? 'OK case (et par advarsler)'
+    : 'Svag case (flere røde flag)';
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="mb-3 flex items-baseline justify-between">
+        <div className="flex items-baseline gap-3">
+          <h3 className="text-[13px] font-semibold tracking-tight text-slate-900">
+            Diagnose
+          </h3>
+          <span
+            className={
+              'rounded-full px-2 py-0.5 text-[11px] font-medium ' +
+              (verdictColor === 'emerald'
+                ? 'bg-emerald-100 text-emerald-800'
+                : verdictColor === 'amber'
+                ? 'bg-amber-100 text-amber-800'
+                : 'bg-rose-100 text-rose-800')
+            }
+          >
+            {verdictLabel}
+          </span>
+        </div>
+        <div className="text-[10px] tabular-nums text-slate-400">
+          <span className="text-emerald-600">✓ {sum.pass}</span>
+          {' · '}
+          <span className="text-amber-600">! {sum.warn}</span>
+          {' · '}
+          <span className="text-rose-600">✗ {sum.fail}</span>
+        </div>
+      </div>
+      <DiagnoseChips flags={flags} />
+      <p className="mt-3 text-[11px] text-slate-400">
+        Hover hver chip for hvorfor den er sat. Comps + median er kun synlige på Top picks-listen
+        (kræver server-side beregning).
+      </p>
     </div>
   );
 }

@@ -7,6 +7,8 @@ import type { OnMarketCandidate, ScrapeJob } from '@/lib/db/schema';
 import { curatedScore, pickCurated } from '@/lib/curation';
 import { formatKr, formatNum, formatPct } from '@/lib/format';
 import { classifyEjerudgift, isGroundFloor, passesQualityFilter } from '@/lib/quality';
+import { diagnoseCase } from '@/lib/diagnose';
+import { DiagnoseChips } from '@/components/DiagnoseChips';
 import { BYDEL_LABEL } from '@/lib/status';
 
 type ReviewStatus = 'ny' | 'interesseret' | 'passet' | 'importeret';
@@ -468,6 +470,7 @@ export function OnMarketClient({
           <thead className="border-b border-slate-200 bg-slate-50/80 text-left text-[11px] font-medium uppercase tracking-wider text-slate-500">
             <tr>
               <th className="px-3 py-2.5">Adresse</th>
+              <th className="px-3 py-2.5" title="Diagnose-flag — hvad gør casen god (grøn) eller dårlig (rød). Hover hver chip for detalje.">Diagnose</th>
               <th className="px-3 py-2.5">Bydel</th>
               <th className="px-3 py-2.5 text-right">kvm</th>
               <th className="px-3 py-2.5 text-right">vær</th>
@@ -503,6 +506,13 @@ export function OnMarketClient({
                       {r.address}
                     </a>
                     <div className="text-xs text-slate-400">{r.postalCode} {r.city}</div>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <DiagnoseChips
+                      flags={diagnoseCase(r, strongFreshMapServer?.[r.id])}
+                      max={4}
+                      inline
+                    />
                   </td>
                   <td className="px-3 py-2.5 text-slate-600">
                     {r.bydel ? BYDEL_LABEL[r.bydel] ?? r.bydel : '–'}
@@ -662,7 +672,7 @@ export function OnMarketClient({
             })}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={16} className="px-3 py-16">
+                <td colSpan={17} className="px-3 py-16">
                   <div className="mx-auto flex max-w-sm flex-col items-center gap-3 text-center">
                     <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
                       <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -775,6 +785,7 @@ function TopPickCard({ c, rank }: { c: TopPickCase; rank: number }) {
   }
 
   const bydel = c.bydel ? c.bydel.replace('-', ' ').replace('oe', 'ø').replace('aer', 'ær') : 'København';
+  const flags = diagnoseCase(c, c.strongFreshAggregate);
 
   return (
     <a
@@ -824,6 +835,11 @@ function TopPickCard({ c, rank }: { c: TopPickCase; rank: number }) {
           </div>
           <div className="text-[10px] opacity-75">{bevis.sub}</div>
         </div>
+      </div>
+
+      {/* Diagnose-chips — hvad gør casen god/dårlig */}
+      <div className="mt-3">
+        <DiagnoseChips flags={flags} max={8} />
       </div>
 
       {/* Midten: udbud → vores estimat → upside */}

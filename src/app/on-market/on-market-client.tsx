@@ -336,10 +336,6 @@ export function OnMarketClient({
         </span>
       </div>
 
-      {/* Top picks — kort-layout (erstatter tabel-kompleksiteten) */}
-      {s.preset === 'curated' && (
-        <TopPicksCards cases={curatedTop20} />
-      )}
 
       {/* Filter bar — grouped + sticky */}
       <div className="sticky top-2 z-10 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white/95 p-2.5 text-sm shadow-sm backdrop-blur-sm">
@@ -462,243 +458,19 @@ export function OnMarketClient({
         </div>
       </div>
 
-      {/* Tabel — kun for andre presets end Top picks (Top picks bruger cards ovenover) */}
-      {s.preset !== 'curated' && (
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="border-b border-slate-200 bg-slate-50/80 text-left text-[11px] font-medium uppercase tracking-wider text-slate-500">
-            <tr>
-              <th className="px-3 py-2.5">Adresse</th>
-              <th className="px-3 py-2.5" title="Diagnose-flag — hvad gør casen god (grøn) eller dårlig (rød). Hover hver chip for detalje.">Diagnose</th>
-              <th className="px-3 py-2.5">Bydel</th>
-              <th className="px-3 py-2.5 text-right">kvm</th>
-              <th className="px-3 py-2.5 text-right">vær</th>
-              <th className="px-3 py-2.5 text-right">Bygget</th>
-              <th className="px-3 py-2.5 text-right">Pris</th>
-              <th className="px-3 py-2.5 text-right">kr/m²</th>
-              <th className="px-3 py-2.5 text-right">Dage</th>
-              <th className="px-3 py-2.5 text-right" title="Ejerudgift kr/m²/år. >1200 = høj (mulig restgæld), >1800 = meget høj. <800 = lav.">Ejerudg</th>
-              <th className="px-3 py-2.5 text-right" title="Claude Vision-vurdering af interiør 1-10. Hover for refurb-cost + deal-breakers.">Stand</th>
-              <th className="px-3 py-2.5 text-right">FMV</th>
-              <th className="px-3 py-2.5 text-right" title="Alpha = (FMV - investeret) / investeret. Positiv = underpriset.">α</th>
-              <th className="px-3 py-2.5 text-right" title="Best-case afkast = α + 14.8% beta + Airbnb cf-yield">Best</th>
-              <th className="px-3 py-2.5">Mægler</th>
-              <th className="px-3 py-2.5">Review</th>
-              <th className="px-3 py-2.5"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((r, idx) => {
-              const review = r.reviewStatus as ReviewStatus;
-              const importedAlready = !!r.convertedPropertyId;
-              return (
-                <tr
-                  key={r.id}
-                  className="row-stagger group border-b border-slate-100 transition-colors duration-100 ease-[var(--ease-out)] last:border-0 hover:bg-slate-50"
-                  style={{ animationDelay: `${Math.min(idx, 12) * 25}ms` }}
-                >
-                  <td className="px-3 py-2.5 font-medium text-slate-900">
-                    <a
-                      href={`/on-market/${r.id}`}
-                      className="rounded-sm decoration-slate-300 decoration-1 underline-offset-2 transition-colors duration-100 ease-[var(--ease-out)] hover:text-blue-700 hover:underline"
-                    >
-                      {r.address}
-                    </a>
-                    <div className="text-xs text-slate-400">{r.postalCode} {r.city}</div>
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <DiagnoseChips
-                      flags={diagnoseCase(r, strongFreshMapServer?.[r.id])}
-                      max={4}
-                      inline
-                    />
-                  </td>
-                  <td className="px-3 py-2.5 text-slate-600">
-                    {r.bydel ? BYDEL_LABEL[r.bydel] ?? r.bydel : '–'}
-                  </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">{formatNum(r.kvm)}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">{r.rooms ?? '–'}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-xs text-slate-500">
-                    {r.yearBuilt ?? '–'}
-                  </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">{formatKr(r.listPrice)}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-xs text-slate-500">
-                    {formatKr(r.perAreaPrice)}
-                  </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-xs text-slate-500">
-                    {r.daysOnMarket ?? '–'}
-                  </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-xs">
-                    {(() => {
-                      const info = classifyEjerudgift({
-                        monthlyExpense: r.monthlyExpense,
-                        kvm: r.kvm,
-                        listPrice: r.listPrice,
-                      });
-                      if (info.perSqmPerYear === null) {
-                        return <span className="text-slate-400">–</span>;
-                      }
-                      const tone =
-                        info.level === 'meget høj'
-                          ? 'text-rose-700 font-semibold'
-                          : info.level === 'høj'
-                          ? 'text-amber-700 font-semibold'
-                          : info.level === 'lav'
-                          ? 'text-emerald-700'
-                          : 'text-slate-600';
-                      return (
-                        <span
-                          className={'tabular-nums ' + tone}
-                          title={`${info.perSqmPerYear} kr/m²/år · ${((info.pctOfListPrice ?? 0) * 100).toFixed(2)}% af udbud — niveau: ${info.level}${info.warning ? '\n\n⚠ ' + info.warning : ''}`}
-                        >
-                          {info.perSqmPerYear}
-                          {info.warning && <span className="ml-0.5">⚠</span>}
-                        </span>
-                      );
-                    })()}
-                  </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-xs">
-                    {(() => {
-                      const a = r.imageAssessment;
-                      if (!a) return <span className="text-slate-400">–</span>;
-                      const cond = a.overall_condition;
-                      const tone =
-                        cond >= 8
-                          ? 'text-emerald-700 font-semibold'
-                          : cond >= 6
-                          ? 'text-emerald-600'
-                          : cond >= 4
-                          ? 'text-amber-700'
-                          : 'text-rose-700 font-semibold';
-                      const dealBreakers = a.deal_breakers ?? [];
-                      const refurb = a.estimated_refurb_cost ?? 0;
-                      return (
-                        <span
-                          className={'tabular-nums ' + tone}
-                          title={`Stand: ${cond}/10 — ${a.renovation_state}\nRefurb-budget: ${refurb.toLocaleString('da-DK')} kr\nStyrker: ${(a.strengths ?? []).join(', ')}${(a.weaknesses ?? []).length ? '\nSvagheder: ' + (a.weaknesses ?? []).join(', ') : ''}${dealBreakers.length ? '\n\n⚠ DEAL-BREAKERS: ' + dealBreakers.join('; ') : ''}`}
-                        >
-                          {cond.toFixed(1)}
-                          {dealBreakers.length > 0 && <span className="ml-0.5">⚠</span>}
-                        </span>
-                      );
-                    })()}
-                  </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-xs">
-                    {r.v3Fmv ? (
-                      <span className="inline-flex items-center gap-1">
-                        {formatKr(r.v3Fmv)}
-                        {r.v3FmvSource === 'manual' && (
-                          <span
-                            className="inline-block h-1.5 w-1.5 rounded-full bg-blue-500"
-                            title="Manuelt sat FMV"
-                          />
-                        )}
-                      </span>
-                    ) : (
-                      '–'
-                    )}
-                  </td>
-                  <td
-                    className={
-                      'px-3 py-2.5 text-right tabular-nums font-semibold ' +
-                      (r.v3Alpha === null
-                        ? 'text-slate-400'
-                        : r.v3Alpha > 0.05
-                        ? 'text-emerald-700'
-                        : r.v3Alpha > 0
-                        ? 'text-emerald-600'
-                        : 'text-rose-600')
-                    }
-                  >
-                    {r.v3Alpha === null ? '–' : formatPct(r.v3Alpha)}
-                  </td>
-                  <td
-                    className={
-                      'px-3 py-2.5 text-right tabular-nums font-semibold ' +
-                      (r.v3AfkastBest === null
-                        ? 'text-slate-400'
-                        : r.v3AfkastBest > 0.2
-                        ? 'text-emerald-700'
-                        : r.v3AfkastBest > 0
-                        ? 'text-emerald-600'
-                        : 'text-rose-600')
-                    }
-                  >
-                    {r.v3AfkastBest === null ? '–' : formatPct(r.v3AfkastBest)}
-                  </td>
-                  <td className="px-3 py-2.5 text-xs capitalize text-slate-500">{r.brokerKind}</td>
-                  <td className="px-3 py-2">
-                    <select
-                      value={review}
-                      onChange={(e) => setReview(r.id, e.target.value as ReviewStatus, r.address)}
-                      disabled={importedAlready}
-                      className={
-                        'cursor-pointer appearance-none rounded-full border-0 bg-no-repeat py-1 pl-2.5 pr-7 text-xs font-medium transition-[background-color,transform] duration-150 ease-[var(--ease-out)] hover:brightness-95 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-60 ' +
-                        REVIEW_COLOR[review]
-                      }
-                      style={{
-                        backgroundImage:
-                          "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>\")",
-                        backgroundPosition: 'right 0.5rem center',
-                        backgroundSize: '10px 10px',
-                      }}
-                    >
-                      {(Object.keys(REVIEW_LABEL) as ReviewStatus[]).map((rv) => (
-                        <option key={rv} value={rv}>{REVIEW_LABEL[rv]}</option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="px-3 py-2">
-                    {importedAlready ? (
-                      <a
-                        href={`/cases/${r.convertedPropertyId}`}
-                        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-blue-700 transition-colors duration-150 ease-[var(--ease-out)] hover:bg-blue-50 active:scale-[0.97]"
-                      >
-                        Se case
-                        <span aria-hidden="true">→</span>
-                      </a>
-                    ) : (
-                      <button
-                        onClick={() => importCandidate(r.id, r.address)}
-                        className="rounded-md bg-slate-900 px-2.5 py-1 text-xs font-medium text-white shadow-sm transition-[transform,background-color,box-shadow] duration-150 ease-[var(--ease-out)] hover:bg-slate-800 hover:shadow-md active:scale-[0.94]"
-                      >
-                        Importér
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={17} className="px-3 py-16">
-                  <div className="mx-auto flex max-w-sm flex-col items-center gap-3 text-center">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
-                      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="11" cy="11" r="8" />
-                        <path d="m21 21-4.3-4.3" />
-                      </svg>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium text-slate-700">
-                        {rows.length === 0 ? 'Ingen scrape-data endnu' : 'Ingen match på filtrene'}
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        {rows.length === 0
-                          ? 'Klik "Scrape Boligsiden nu" øverst for at hente listings.'
-                          : 'Prøv at justere filtrene eller nulstil dem.'}
-                      </p>
-                    </div>
-                  </div>
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-        </div>
-      </div>
-      )}
+      {/* Card-list — samme layout for alle presets */}
+      <CaseCards
+        cases={filtered}
+        showRank={s.preset === 'curated'}
+        emptyMessage={
+          rows.length === 0
+            ? 'Ingen scrape-data endnu. Klik "Scrape Boligsiden nu" øverst.'
+            : s.preset === 'curated'
+            ? 'Ingen cases passerer Top picks-gates lige nu.'
+            : 'Ingen cases matcher filtrene. Prøv at nulstille.'
+        }
+        strongFreshMap={strongFreshMapServer}
+      />
     </div>
   );
 }
@@ -725,34 +497,51 @@ function ScoreLegendItem({
   );
 }
 
-// ─── Top Picks Cards — fokuseret layout uden jargon ──────────────────────
+// ─── Case Cards — unified layout for ALLE presets ─────────────────────────
 type TopPickCase = ReturnType<typeof pickCurated>[number];
 
-function TopPicksCards({ cases }: { cases: TopPickCase[] }) {
+function CaseCards({
+  cases,
+  showRank = false,
+  emptyMessage = 'Ingen cases matcher filtrene.',
+  strongFreshMap,
+}: {
+  cases: OnMarketCandidate[];
+  showRank?: boolean;
+  emptyMessage?: string;
+  strongFreshMap?: Record<string, import('@/lib/strongComps').StrongFreshAggregate>;
+}) {
   if (cases.length === 0) {
     return (
       <div className="rounded-xl border border-slate-200 bg-white p-12 text-center text-sm text-slate-500">
-        Ingen cases passerer Top picks-gates lige nu. Scrape Boligsiden eller juster filtre.
+        {emptyMessage}
       </div>
     );
   }
 
   return (
     <div className="space-y-3">
-      <div className="px-1 text-sm text-slate-600">
-        <span className="font-semibold text-slate-900">{cases.length} cases</span>
-        <span className="text-slate-400"> · sorteret efter samlet vurdering. Vores estimat = AVM justeret efter hvad markedet faktisk betaler for lignende lejligheder.</span>
-      </div>
       {cases.map((c, idx) => (
-        <TopPickCard key={c.id} c={c} rank={idx + 1} />
+        <CaseCard
+          key={c.id}
+          c={c}
+          rank={showRank ? idx + 1 : null}
+          agg={strongFreshMap?.[c.id]}
+        />
       ))}
     </div>
   );
 }
 
-function TopPickCard({ c, rank }: { c: TopPickCase; rank: number }) {
-  // Vis rå AVM (eller manuel FMV) — ingen justering. Det er hvad modellen siger,
-  // og det vil bruger se direkte.
+function CaseCard({
+  c,
+  rank,
+  agg,
+}: {
+  c: OnMarketCandidate;
+  rank: number | null;
+  agg?: import('@/lib/strongComps').StrongFreshAggregate;
+}) {
   const estimat = c.v3Fmv ?? 0;
   const listPrice = c.listPrice ?? 0;
   const upsidePct = listPrice > 0 ? ((estimat - listPrice) / listPrice) * 100 : 0;
@@ -762,7 +551,7 @@ function TopPickCard({ c, rank }: { c: TopPickCase; rank: number }) {
 
   // Bevis-styrke: kombiner antal comps + stand
   const stand = c.imageAssessment?.overall_condition ?? null;
-  const compCount = c.strongFreshAggregate?.count ?? 0;
+  const compCount = agg?.count ?? 0;
   let bevis: { color: string; label: string; sub: string };
   if (compCount >= 10 && (stand === null || stand >= 7)) {
     bevis = {
@@ -785,20 +574,22 @@ function TopPickCard({ c, rank }: { c: TopPickCase; rank: number }) {
   }
 
   const bydel = c.bydel ? c.bydel.replace('-', ' ').replace('oe', 'ø').replace('aer', 'ær') : 'København';
-  const flags = diagnoseCase(c, c.strongFreshAggregate);
+  const flags = diagnoseCase(c, agg);
 
   return (
     <a
       href={`/on-market/${c.id}`}
       className="row-stagger group block rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-[box-shadow,border-color,transform] duration-150 ease-[var(--ease-out)] hover:border-slate-300 hover:shadow-md active:scale-[0.998]"
-      style={{ animationDelay: `${Math.min(rank, 12) * 30}ms` }}
+      style={{ animationDelay: `${Math.min(rank ?? 0, 12) * 30}ms` }}
     >
       <div className="flex items-start justify-between gap-4">
         {/* Venstre: rank + adresse */}
         <div className="flex items-start gap-3">
-          <span className="mt-1 flex h-7 w-7 flex-none items-center justify-center rounded-full bg-slate-100 text-[11px] font-semibold tabular-nums text-slate-600">
-            #{rank}
-          </span>
+          {rank !== null && (
+            <span className="mt-1 flex h-7 w-7 flex-none items-center justify-center rounded-full bg-slate-100 text-[11px] font-semibold tabular-nums text-slate-600">
+              #{rank}
+            </span>
+          )}
           <div>
             <h3 className="text-base font-semibold tracking-tight text-slate-900 group-hover:text-blue-700">
               {c.address}
@@ -860,18 +651,29 @@ function TopPickCard({ c, rank }: { c: TopPickCase; rank: number }) {
           <div className="text-[10px] font-medium uppercase tracking-wider text-slate-400">
             Vores estimat
           </div>
-          <div className="mt-1 text-xl font-bold tabular-nums tracking-tight text-slate-900">
-            {formatKr(estimat)}
-          </div>
-          <div className="mt-0.5 text-[11px] tabular-nums text-slate-400">
-            {Math.round(estimatPpm).toLocaleString('da-DK')} kr/m²
-          </div>
+          {estimat > 0 ? (
+            <>
+              <div className="mt-1 text-xl font-bold tabular-nums tracking-tight text-slate-900">
+                {formatKr(estimat)}
+              </div>
+              <div className="mt-0.5 text-[11px] tabular-nums text-slate-400">
+                {Math.round(estimatPpm).toLocaleString('da-DK')} kr/m²
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="mt-1 text-xl font-bold tabular-nums text-slate-300">–</div>
+              <div className="mt-0.5 text-[11px] text-amber-600">AVM mangler</div>
+            </>
+          )}
         </div>
 
         <div
           className={
             'rounded-lg p-3 ' +
-            (upsidePct >= 5
+            (estimat === 0
+              ? 'bg-slate-50'
+              : upsidePct >= 5
               ? 'bg-emerald-50/60'
               : upsidePct >= 0
               ? 'bg-emerald-50/30'
@@ -881,29 +683,38 @@ function TopPickCard({ c, rank }: { c: TopPickCase; rank: number }) {
           <div
             className={
               'text-[10px] font-medium uppercase tracking-wider ' +
-              (upsidePct >= 0 ? 'text-emerald-700' : 'text-rose-700')
+              (estimat === 0
+                ? 'text-slate-400'
+                : upsidePct >= 0
+                ? 'text-emerald-700'
+                : 'text-rose-700')
             }
           >
-            {upsidePct >= 0 ? 'Upside' : 'Negativ'}
+            {estimat === 0 ? 'Upside' : upsidePct >= 0 ? 'Upside' : 'Negativ'}
           </div>
           <div
             className={
               'mt-1 text-2xl font-bold tabular-nums tracking-tight ' +
-              (upsidePct >= 0 ? 'text-emerald-700' : 'text-rose-700')
+              (estimat === 0
+                ? 'text-slate-300'
+                : upsidePct >= 0
+                ? 'text-emerald-700'
+                : 'text-rose-700')
             }
           >
-            {upsidePct >= 0 ? '+' : ''}
-            {upsidePct.toFixed(1)}%
+            {estimat === 0 ? '–' : `${upsidePct >= 0 ? '+' : ''}${upsidePct.toFixed(1)}%`}
           </div>
-          <div
-            className={
-              'mt-0.5 text-[11px] tabular-nums ' +
-              (upsidePct >= 0 ? 'text-emerald-700/70' : 'text-rose-700/70')
-            }
-          >
-            {upsideKr >= 0 ? '+' : ''}
-            {formatKr(upsideKr)}
-          </div>
+          {estimat > 0 && (
+            <div
+              className={
+                'mt-0.5 text-[11px] tabular-nums ' +
+                (upsidePct >= 0 ? 'text-emerald-700/70' : 'text-rose-700/70')
+              }
+            >
+              {upsideKr >= 0 ? '+' : ''}
+              {formatKr(upsideKr)}
+            </div>
+          )}
         </div>
       </div>
 

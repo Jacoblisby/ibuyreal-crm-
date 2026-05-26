@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import type { OnMarketCandidate, ScrapeJob } from '@/lib/db/schema';
 import { curatedScore, pickCurated } from '@/lib/curation';
 import { formatKr, formatNum, formatPct } from '@/lib/format';
-import { classifyEjerudgift, isGroundFloor, passesQualityFilter } from '@/lib/quality';
+import { classifyEjerudgift, isGroundFloor } from '@/lib/quality';
 import { diagnoseCase } from '@/lib/diagnose';
 import { DiagnoseChips } from '@/components/DiagnoseChips';
 import { BYDEL_LABEL } from '@/lib/status';
@@ -27,7 +27,7 @@ const REVIEW_COLOR: Record<ReviewStatus, string> = {
   importeret: 'bg-blue-100 text-blue-700',
 };
 
-type Preset = 'all' | 'curated' | 'core' | 'fallback';
+type Preset = 'all' | 'curated' | 'fallback';
 
 interface State {
   preset: Preset;
@@ -62,11 +62,6 @@ const PRESET_LABEL: Record<Preset, { label: string; desc: string }> = {
     label: 'Top picks',
     desc:
       'Cases hvor friske handler i samme område bekræfter et godt køb. Ingen stueetage, ingen hjemfald, ingen 1950–1990 betonejendomme, ingen støjgader, lejligheden i god stand.',
-  },
-  core: {
-    label: 'Core picks',
-    desc:
-      'AVM/manuel FMV · 50-100 kvm · dage ≥30 · α 0-30% · ikke stueetage · ikke 1950-1990 · ikke støjstreets',
   },
   fallback: { label: 'Mangler AVM', desc: 'Kun cases hvor modellen ikke kunne predicte' },
 };
@@ -105,16 +100,6 @@ export function OnMarketClient({
     [rows, s.showDisqualified],
   );
 
-  // Single source of truth for "core picks" logic
-  const isCorePick = (x: OnMarketCandidate): boolean =>
-    (x.v3FmvSource === 'ibuyreal-avm' || x.v3FmvSource === 'manual') &&
-    (x.kvm ?? 0) >= 50 &&
-    (x.kvm ?? 0) <= 100 &&
-    (x.daysOnMarket ?? 0) >= 30 &&
-    (x.v3Alpha ?? 0) > 0 &&
-    (x.v3Alpha ?? 0) < 0.3 &&
-    passesQualityFilter({ address: x.address, yearBuilt: x.yearBuilt });
-
   const curatedTop20 = useMemo(
     () =>
       pickCurated(activeRows, 15, {
@@ -139,12 +124,10 @@ export function OnMarketClient({
     return {
       all: activeRows.length,
       curated: curatedTop20.length,
-      core: activeRows.filter(isCorePick).length,
       fallback: activeRows.filter(
         (x) => x.v3FmvSource !== 'ibuyreal-avm' && x.v3FmvSource !== 'manual',
       ).length,
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeRows, curatedTop20]);
 
   const filtered = useMemo(() => {
@@ -157,8 +140,6 @@ export function OnMarketClient({
       r = [...r].sort(
         (a, b) => (scoreMap.get(b.id)?.total ?? 0) - (scoreMap.get(a.id)?.total ?? 0),
       );
-    } else if (s.preset === 'core') {
-      r = r.filter(isCorePick);
     } else if (s.preset === 'fallback') {
       r = r.filter((x) => x.v3FmvSource !== 'ibuyreal-avm' && x.v3FmvSource !== 'manual');
     }
@@ -304,7 +285,7 @@ export function OnMarketClient({
 
       {/* Preset pills */}
       <div className="flex flex-wrap items-center gap-2">
-        {(['all', 'curated', 'core', 'fallback'] as Preset[]).map((p) => {
+        {(['all', 'curated', 'fallback'] as Preset[]).map((p) => {
           const active = s.preset === p;
           const meta = PRESET_LABEL[p];
           return (

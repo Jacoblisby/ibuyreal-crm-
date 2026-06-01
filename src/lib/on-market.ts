@@ -102,7 +102,7 @@ const BASE_SELECT = sql`
       p.address_id,
       p.building_uuid
     FROM public.property p
-    ORDER BY p.address_id, p.id DESC
+    ORDER BY p.address_id, p.unit_uuid DESC
   ) property_match ON property_match.address_id = l.address_id
   LEFT JOIN bbr.building b ON b.building_uuid = property_match.building_uuid
 `;

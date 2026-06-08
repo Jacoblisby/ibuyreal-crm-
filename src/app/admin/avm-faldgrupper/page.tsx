@@ -305,30 +305,40 @@ export default async function AvmFaldgrupberPage() {
   ];
 
   const streetResults = noiseStreets.map((street) => {
-    const matches = allSales12m_streets.filter(
-      (s) => s.address.toLowerCase().includes(street.toLowerCase()) && s.kvm && s.kvm >= 40 && s.kvm <= 110,
+    const streetLower = street.toLowerCase();
+    const onStreet = allSales12m_streets.filter(
+      (s) => s.address.toLowerCase().includes(streetLower) && s.kvm && s.kvm >= 40 && s.kvm <= 110,
     );
-    if (matches.length < 3) return null;
-    const ppms = matches.map((s) => s.perAreaPrice ?? s.amount / s.kvm!);
-    const streetAvg = ppms.reduce((a, b) => a + b, 0) / ppms.length;
-    // Find postnummer-median for hver case og avg det
-    const postMedians: number[] = [];
-    for (const m of matches) {
-      const arr = postnrPpm.get(m.postalCode);
-      if (arr && arr.length >= 5) {
-        const sorted = [...arr].sort((a, b) => a - b);
-        postMedians.push(sorted[Math.floor(sorted.length / 2)]);
-      }
-    }
-    if (postMedians.length === 0) return null;
-    const postAvg = postMedians.reduce((a, b) => a + b, 0) / postMedians.length;
-    const effectPct = ((streetAvg - postAvg) / postAvg) * 100;
+    if (onStreet.length < 3) return null;
+
+    // Find samme micro-location (postnumre hvor gaden findes), men EKSKLUSIV gaden selv
+    const affectedPostnumre = new Set(onStreet.map((s) => s.postalCode));
+    const offStreet = allSales12m_streets.filter(
+      (s) =>
+        s.kvm && s.kvm >= 40 && s.kvm <= 110 &&
+        affectedPostnumre.has(s.postalCode) &&
+        !s.address.toLowerCase().includes(streetLower),
+    );
+    if (offStreet.length < 5) return null;
+
+    const onPpms = onStreet.map((s) => s.perAreaPrice ?? s.amount / s.kvm!);
+    const offPpms = offStreet.map((s) => s.perAreaPrice ?? s.amount / s.kvm!);
+    const median = (arr: number[]) => {
+      const sorted = [...arr].sort((a, b) => a - b);
+      return sorted[Math.floor(sorted.length / 2)];
+    };
+    const streetMedian = median(onPpms);
+    const microMedian = median(offPpms);
+    const effectPct = ((streetMedian - microMedian) / microMedian) * 100;
+
     return {
       street,
-      n: matches.length,
-      streetAvg: Math.round(streetAvg),
-      postAvg: Math.round(postAvg),
+      n: onStreet.length,
+      nOff: offStreet.length,
+      streetMedian: Math.round(streetMedian),
+      microMedian: Math.round(microMedian),
       effectPct,
+      postnumre: Array.from(affectedPostnumre).sort().join(', '),
     };
   }).filter((r): r is NonNullable<typeof r> => r !== null);
   streetResults.sort((a, b) => a.effectPct - b.effectPct);
@@ -599,30 +609,33 @@ export default async function AvmFaldgrupberPage() {
       {streetResults.length > 0 && (
         <Section
           n={5}
-          title="Støjende gader — empirisk pristraf"
-          insight="Sammenligner gns. ppm på specifikke gader vs gns. ppm for samme postnummer. Negativ % = gaden er billigere end andre adresser i samme postnummer = reel støj-rabat. AVM-modellen kan bruge dette til at lære 'noise_level' som lav/mellem/høj feature pr. gade."
+          title="Støjende gader — empirisk pristraf vs samme mikrolokation"
+          insight="Sammenligner median ppm PÅ den støjende gade vs median ppm i SAMME postnummer men på andre gader. Det isolerer gadens egen effekt (uden at den selv trækker postnummer-medianen ned). Negativ % = gaden er billigere end nabokvarteret = reel støj-rabat."
         >
           <div className="overflow-hidden rounded-lg border border-slate-200">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-left text-[11px] font-medium uppercase tracking-wider text-slate-500">
                 <tr>
                   <th className="px-3 py-2">Gade</th>
-                  <th className="px-3 py-2 text-right">Gade gns.</th>
-                  <th className="px-3 py-2 text-right">Postnr-median</th>
-                  <th className="px-3 py-2 text-right">Effekt</th>
-                  <th className="px-3 py-2 text-right">n</th>
+                  <th className="px-3 py-2 text-right" title="Median ppm for handler på selve gaden (sidste 12 mdr)">På gaden</th>
+                  <th className="px-3 py-2 text-right" title="Median ppm for handler i samme postnumre, men IKKE på den støjende gade">Samme mikrolok.</th>
+                  <th className="px-3 py-2 text-right" title="(på gaden − samme mikrolok) / samme mikrolok">Pristraf</th>
+                  <th className="px-3 py-2 text-right" title="Antal handler på gaden / antal handler i samme postnumre uden gaden">n (gade/lok.)</th>
                   <th className="px-3 py-2">Niveau</th>
                 </tr>
               </thead>
               <tbody>
                 {streetResults.map((r) => (
                   <tr key={r.street} className="border-t border-slate-100">
-                    <td className="px-3 py-2 font-medium text-slate-900">{r.street}</td>
+                    <td className="px-3 py-2 font-medium text-slate-900">
+                      {r.street}
+                      <div className="text-[10px] text-slate-400">Postnumre: {r.postnumre}</div>
+                    </td>
                     <td className="px-3 py-2 text-right tabular-nums text-xs text-slate-600">
-                      {r.streetAvg.toLocaleString('da-DK')}
+                      {r.streetMedian.toLocaleString('da-DK')}
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums text-xs text-slate-400">
-                      {r.postAvg.toLocaleString('da-DK')}
+                      {r.microMedian.toLocaleString('da-DK')}
                     </td>
                     <td
                       className={
@@ -639,7 +652,9 @@ export default async function AvmFaldgrupberPage() {
                       {r.effectPct >= 0 ? '+' : ''}
                       {r.effectPct.toFixed(1)}%
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-xs text-slate-500">{r.n}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-xs text-slate-500">
+                      {r.n} / {r.nOff}
+                    </td>
                     <td className="px-3 py-2">
                       {r.effectPct <= -20 && (
                         <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-medium text-rose-800">
@@ -668,9 +683,15 @@ export default async function AvmFaldgrupberPage() {
             </table>
           </div>
           <p className="mt-3 text-[11px] leading-relaxed text-slate-500">
-            <strong>Tiered noise-niveau forslag til AVM:</strong> Mads' model bruger lav/mellem/høj/null skala
-            — denne empiriske test giver ham et udgangspunkt: gader med ≥-20% effekt = høj, -7% til -20% = mellem,
-            -2% til -7% = lav. Bemærk at små samples (n&lt;5) er statistisk usikre — behandl dem som hints, ikke fakta.
+            <strong>Sådan læses:</strong> "På gaden" = median ppm på selve den støjende gade. "Samme mikrolokation" =
+            median ppm i SAMME postnumre, men på alle ANDRE gader. Forskellen er den isolerede støj-effekt.
+            Eksempel: Hvis Folehaven viser -30% betyder det at handler PÅ Folehaven sælger 30% under handler i samme
+            postnummer som ikke ligger på Folehaven.
+          </p>
+          <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
+            <strong>Tiered noise-niveau forslag til AVM:</strong> Mads' model bruger lav/mellem/høj/null skala —
+            denne test giver et udgangspunkt: ≥-20% = høj, -7% til -20% = mellem, -2% til -7% = lav. Små samples
+            (n&lt;5 på gaden) er statistisk usikre — behandl dem som hints, ikke fakta.
           </p>
         </Section>
       )}

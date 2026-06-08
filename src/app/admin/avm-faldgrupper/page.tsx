@@ -199,32 +199,58 @@ export default async function AvmFaldgrupberPage() {
     sideA: { label: string; postnumre: string[] };
     sideB: { label: string; postnumre: string[] };
   }
+  // Postnummer-clusters til at samle data fra flere små postnumre
+  const INDRE_BY_N = ['1255', '1264', '1270', '1302', '1307', '1310', '1311', '1313', '1319'];
+  const INDRE_BY_S = ['1352', '1356', '1361', '1362', '1370'];
+  const CHRISTIANSHAVN = ['1400', '1401', '1408', '1415', '1420', '1422', '1424', '1425', '1427', '1428', '1429'];
+  const HOLMEN = ['1436', '1437'];
+  const VESTERBRO_KLASSISK = ['1620', '1650', '1666', '1671', '1717', '1720', '1721', '1722', '1731', '1740', '1741', '1751'];
+  const VESTERBRO_KALVEBOD = ['1799', '1786', '1789'];
+  const FREDERIKSBERG_N = ['1850', '1860', '1870', '1872', '1873', '1874', '1875', '1879', '1900', '1902', '1903', '1904', '1908', '1910', '1915', '1916', '1917', '1919', '1923', '1925', '1928', '1929'];
+  const FREDERIKSBERG_S = ['1950', '1953', '1955', '1957', '1958', '1960', '1963', '1966', '1970', '1971', '1973'];
+
   const barrierTests: BarrierTest[] = [
-    // Vest-grænser
-    { name: 'Folehaven (Ring 2)', sideA: { label: 'Sydhavn', postnumre: ['2450'] }, sideB: { label: 'Valby', postnumre: ['2500'] } },
-    { name: 'Bispeengbuen', sideA: { label: 'Frederiksberg', postnumre: ['2000'] }, sideB: { label: 'Nordvest', postnumre: ['2400'] } },
-    { name: 'Borups Allé / Nordvest-grænse', sideA: { label: 'Nørrebro', postnumre: ['2200'] }, sideB: { label: 'Nordvest', postnumre: ['2400'] } },
+    // ─── HAVN + CHRISTIANSHAVN-AKSEN ────────────────────────────────────
+    { name: 'Inderhavnen (Christianshavn ↔ Indre By N)', sideA: { label: 'Christianshavn', postnumre: CHRISTIANSHAVN }, sideB: { label: 'Indre By N', postnumre: INDRE_BY_N } },
+    { name: 'Holmen / Operaen ↔ Christianshavn', sideA: { label: 'Holmen', postnumre: HOLMEN }, sideB: { label: 'Christianshavn', postnumre: CHRISTIANSHAVN } },
+    { name: 'Holmen ↔ Indre By N', sideA: { label: 'Holmen', postnumre: HOLMEN }, sideB: { label: 'Indre By N', postnumre: INDRE_BY_N } },
+    { name: 'Sundby-broen (Christianshavn ↔ Amager)', sideA: { label: 'Christianshavn', postnumre: CHRISTIANSHAVN }, sideB: { label: 'Amager', postnumre: ['2300'] } },
+    { name: 'Sydhavnen (Sydhavn ↔ Amager)', sideA: { label: 'Sydhavn', postnumre: ['2450'] }, sideB: { label: 'Amager', postnumre: ['2300'] } },
+
+    // ─── INDRE BY INTERN ───────────────────────────────────────────────
+    { name: 'Strøget-aksen (Indre By N ↔ Indre By S)', sideA: { label: 'Indre By N', postnumre: INDRE_BY_N }, sideB: { label: 'Indre By S', postnumre: INDRE_BY_S } },
+
+    // ─── SØERNE-AKSEN ────────────────────────────────────────────────
+    { name: 'Søerne (Indre By N ↔ Nørrebro)', sideA: { label: 'Indre By N', postnumre: INDRE_BY_N }, sideB: { label: 'Nørrebro', postnumre: ['2200'] } },
+    { name: 'Søerne (Indre By N ↔ Østerbro)', sideA: { label: 'Indre By N', postnumre: INDRE_BY_N }, sideB: { label: 'Østerbro', postnumre: ['2100'] } },
+    { name: 'Søerne (Frederiksberg ↔ Indre By N)', sideA: { label: 'Indre By N', postnumre: INDRE_BY_N }, sideB: { label: 'Frederiksberg', postnumre: ['2000'] } },
+
+    // ─── VESTERBRO INTERN ─────────────────────────────────────────────
+    { name: 'Vesterbro Kalvebod ↔ klassisk', sideA: { label: 'Kalvebod (1786-99)', postnumre: VESTERBRO_KALVEBOD }, sideB: { label: 'Vesterbro klassisk', postnumre: VESTERBRO_KLASSISK } },
+
+    // ─── FREDERIKSBERG INTERN ─────────────────────────────────────────
+    { name: 'Frederiksberg N ↔ S', sideA: { label: 'Frederiksberg S', postnumre: FREDERIKSBERG_S }, sideB: { label: 'Frederiksberg N', postnumre: FREDERIKSBERG_N } },
+    { name: 'Frederiksberg-hovedpostnr ↔ Frederiksberg N', sideA: { label: 'Frb 2000', postnumre: ['2000'] }, sideB: { label: 'Frederiksberg N', postnumre: FREDERIKSBERG_N } },
+
+    // ─── ØSTERBRO + NORDHAVN ──────────────────────────────────────────
+    { name: 'Tagensvej / Jagtvej (Østerbro ↔ Nørrebro)', sideA: { label: 'Østerbro', postnumre: ['2100'] }, sideB: { label: 'Nørrebro', postnumre: ['2200'] } },
+    { name: 'Strandboulevarden (Østerbro ↔ Nordhavn)', sideA: { label: 'Nordhavn', postnumre: ['2150'] }, sideB: { label: 'Østerbro', postnumre: ['2100'] } },
+    { name: 'Hellerup ↔ Nordhavn (Tuborg-aksen)', sideA: { label: 'Hellerup', postnumre: ['2900'] }, sideB: { label: 'Nordhavn', postnumre: ['2150'] } },
+
+    // ─── VESTERBRO ↔ FREDERIKSBERG ────────────────────────────────────
+    { name: 'Vester Voldgade / Hovedbanegården (Vesterbro Kalvebod ↔ Frederiksberg)', sideA: { label: 'Kalvebod 1799', postnumre: VESTERBRO_KALVEBOD }, sideB: { label: 'Frederiksberg N', postnumre: FREDERIKSBERG_N } },
+    { name: 'Vesterbro klassisk ↔ Frederiksberg', sideA: { label: 'Frederiksberg', postnumre: ['2000'] }, sideB: { label: 'Vesterbro klassisk', postnumre: VESTERBRO_KLASSISK } },
+
+    // ─── VEST-AKSEN ───────────────────────────────────────────────────
+    { name: 'Folehaven (Ring 2 — Sydhavn ↔ Valby)', sideA: { label: 'Sydhavn', postnumre: ['2450'] }, sideB: { label: 'Valby', postnumre: ['2500'] } },
+    { name: 'Bispeengbuen (Frederiksberg ↔ Nordvest)', sideA: { label: 'Frederiksberg', postnumre: ['2000'] }, sideB: { label: 'Nordvest', postnumre: ['2400'] } },
+    { name: 'Borups Allé (Nørrebro ↔ Nordvest)', sideA: { label: 'Nørrebro', postnumre: ['2200'] }, sideB: { label: 'Nordvest', postnumre: ['2400'] } },
     { name: 'Frederikssundsvej (Brønshøj ↔ Vanløse)', sideA: { label: 'Vanløse', postnumre: ['2720'] }, sideB: { label: 'Brønshøj', postnumre: ['2700'] } },
     { name: 'Nordvest-Brønshøj korridor', sideA: { label: 'Nordvest', postnumre: ['2400'] }, sideB: { label: 'Brønshøj', postnumre: ['2700'] } },
     { name: 'Roskildevej (Frederiksberg ↔ Vanløse)', sideA: { label: 'Frederiksberg', postnumre: ['2000'] }, sideB: { label: 'Vanløse', postnumre: ['2720'] } },
 
-    // Øst-grænser
-    { name: 'Tagensvej / Jagtvej (Østerbro ↔ Nørrebro)', sideA: { label: 'Østerbro', postnumre: ['2100'] }, sideB: { label: 'Nørrebro', postnumre: ['2200'] } },
-    { name: 'Strandboulevarden (Østerbro ↔ Nordhavn)', sideA: { label: 'Nordhavn', postnumre: ['2150'] }, sideB: { label: 'Østerbro', postnumre: ['2100'] } },
-    { name: 'Søerne — Indre By ↔ Frederiksberg', sideA: { label: 'Frederiksberg', postnumre: ['2000'] }, sideB: { label: 'Indre By N', postnumre: ['1300', '1400', '1500'] } },
-
-    // Indre By premium
-    { name: 'Indre By premium-akse (Slotsholmen)', sideA: { label: 'Indre By 1436', postnumre: ['1436'] }, sideB: { label: 'Indre By 1302', postnumre: ['1302'] } },
-
-    // Vesterbro internal
-    { name: 'Carlsbergvej / Vesterbro vest-øst', sideA: { label: 'Kalvebod 1799', postnumre: ['1799'] }, sideB: { label: 'Halmtorv 1666', postnumre: ['1666'] } },
-
-    // Amager + havn
-    { name: 'Sydhavnen (Sydhavn ↔ Amager)', sideA: { label: 'Sydhavn', postnumre: ['2450'] }, sideB: { label: 'Amager', postnumre: ['2300'] } },
-
-    // Nord
+    // ─── NORD-AKSEN ───────────────────────────────────────────────────
     { name: 'Strandvejen / Ring 3 (Hellerup ↔ Lyngby)', sideA: { label: 'Hellerup', postnumre: ['2900'] }, sideB: { label: 'Lyngby', postnumre: ['2800'] } },
-    { name: 'Hellerup ↔ Nordhavn (Tuborg-aksen)', sideA: { label: 'Hellerup', postnumre: ['2900'] }, sideB: { label: 'Nordhavn', postnumre: ['2150'] } },
   ];
 
   function aggregatePostnumre(postnumre: string[]): { median: number; n: number } | null {
@@ -233,7 +259,7 @@ export default async function AvmFaldgrupberPage() {
       const arr = postnrPpm.get(pc);
       if (arr) all.push(...arr);
     }
-    if (all.length < 5) return null;
+    if (all.length < 3) return null;
     const sorted = [...all].sort((a, b) => a - b);
     return { median: sorted[Math.floor(sorted.length / 2)], n: all.length };
   }

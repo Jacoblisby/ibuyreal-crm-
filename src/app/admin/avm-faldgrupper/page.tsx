@@ -159,6 +159,80 @@ export default async function AvmFaldgrupberPage() {
     })
     .slice(0, 10);
 
+  // ─── BARRIER-TEST: empirisk test af geografiske skillelinjer ──────────
+  // Computer median ppm per postnummer fra Resight (sidste 12 mdr,
+  // kvm 40-110 for at få sammenligneligt grundlag).
+  const cutoff12m = new Date();
+  cutoff12m.setMonth(cutoff12m.getMonth() - 12);
+  const cutoff12mStr = cutoff12m.toISOString().slice(0, 10);
+
+  const allSales12m = await db
+    .select({
+      postalCode: externalSales.postalCode,
+      perAreaPrice: externalSales.perAreaPrice,
+      amount: externalSales.amount,
+      kvm: externalSales.kvm,
+    })
+    .from(externalSales)
+    .where(gte(externalSales.saleDate, cutoff12mStr));
+
+  const postnrPpm = new Map<string, number[]>();
+  for (const s of allSales12m) {
+    if (!s.kvm || s.kvm < 40 || s.kvm > 110) continue;
+    const ppm = s.perAreaPrice ?? s.amount / s.kvm;
+    const arr = postnrPpm.get(s.postalCode) ?? [];
+    arr.push(ppm);
+    postnrPpm.set(s.postalCode, arr);
+  }
+  const postnrMedian = new Map<string, { median: number; n: number }>();
+  for (const [pc, ppms] of postnrPpm) {
+    if (ppms.length < 5) continue;
+    const sorted = [...ppms].sort((a, b) => a - b);
+    postnrMedian.set(pc, {
+      median: sorted[Math.floor(sorted.length / 2)],
+      n: ppms.length,
+    });
+  }
+
+  interface BarrierTest {
+    name: string;
+    sideA: { label: string; postnumre: string[] };
+    sideB: { label: string; postnumre: string[] };
+  }
+  const barrierTests: BarrierTest[] = [
+    { name: 'Folehaven (Ring 2)', sideA: { label: 'Sydhavn', postnumre: ['2450'] }, sideB: { label: 'Valby', postnumre: ['2500'] } },
+    { name: 'Bispeengbuen', sideA: { label: 'Frederiksberg', postnumre: ['2000'] }, sideB: { label: 'Nordvest', postnumre: ['2400'] } },
+    { name: 'Borups Allé / Nordvest-grænse', sideA: { label: 'Nørrebro', postnumre: ['2200'] }, sideB: { label: 'Nordvest', postnumre: ['2400'] } },
+    { name: 'Tagensvej / Jagtvej (Østerbro ↔ Nørrebro)', sideA: { label: 'Østerbro', postnumre: ['2100'] }, sideB: { label: 'Nørrebro', postnumre: ['2200'] } },
+    { name: 'Søerne — Indre By ↔ Frederiksberg', sideA: { label: 'Frederiksberg', postnumre: ['2000'] }, sideB: { label: 'Indre By N', postnumre: ['1300', '1400', '1500'] } },
+    { name: 'Strandvejen / Ring 3 (Hellerup ↔ Lyngby)', sideA: { label: 'Hellerup', postnumre: ['2900'] }, sideB: { label: 'Lyngby', postnumre: ['2800'] } },
+  ];
+
+  function aggregatePostnumre(postnumre: string[]): { median: number; n: number } | null {
+    const all: number[] = [];
+    for (const pc of postnumre) {
+      const arr = postnrPpm.get(pc);
+      if (arr) all.push(...arr);
+    }
+    if (all.length < 5) return null;
+    const sorted = [...all].sort((a, b) => a - b);
+    return { median: sorted[Math.floor(sorted.length / 2)], n: all.length };
+  }
+
+  const barrierResults = barrierTests.map((t) => {
+    const a = aggregatePostnumre(t.sideA.postnumre);
+    const b = aggregatePostnumre(t.sideB.postnumre);
+    let verdict: 'confirmed' | 'rejected' | 'insufficient' = 'insufficient';
+    let gapPct: number | null = null;
+    if (a && b) {
+      gapPct = Math.abs(((a.median - b.median) / Math.min(a.median, b.median)) * 100);
+      if (gapPct >= 8) verdict = 'confirmed';
+      else if (gapPct < 3) verdict = 'rejected';
+      else verdict = 'rejected'; // grey zone treated as not-confirmed
+    }
+    return { ...t, a, b, gapPct, verdict };
+  });
+
   // ─── KATEGORI-EKSEMPLER: top fejl per kategori ─────────────────────────
   const categoryExamples = {
     stueetage: rows.filter((r) => isGroundFloor(r.address) && (r.v3Alpha ?? 0) > 0).sort((a, b) => (b.v3Alpha ?? 0) - (a.v3Alpha ?? 0)).slice(0, 3),
@@ -334,9 +408,96 @@ export default async function AvmFaldgrupberPage() {
         </Section>
       )}
 
-      {/* ─── KATEGORI-EKSEMPLER ─────────────────────────────────────────── */}
+      {/* ─── PATTERN 4: Barrier-test ───────────────────────────────────── */}
       <Section
         n={4}
+        title="Geografiske skillelinjer — empirisk test"
+        insight="Sammenligning af median ppm på tværs af foreslåede skillelinjer (sidste 12 mdr, kvm 40-110). Vi behandler en barriere som BEKRÆFTET hvis prisgap'et er ≥8% mellem postnumrene på hver side — under det er forskellen for lille til at konkludere det er en barriere snarere end almindelig bydels-variation."
+      >
+        <div className="overflow-hidden rounded-lg border border-slate-200">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-left text-[11px] font-medium uppercase tracking-wider text-slate-500">
+              <tr>
+                <th className="px-3 py-2">Skillelinje</th>
+                <th className="px-3 py-2 text-right">Side A</th>
+                <th className="px-3 py-2 text-right">Side B</th>
+                <th className="px-3 py-2 text-right">Forskel</th>
+                <th className="px-3 py-2">Verdict</th>
+              </tr>
+            </thead>
+            <tbody>
+              {barrierResults.map((r) => (
+                <tr key={r.name} className="border-t border-slate-100">
+                  <td className="px-3 py-2 font-medium text-slate-900">{r.name}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-xs">
+                    {r.a ? (
+                      <>
+                        <span className="text-slate-700">{Math.round(r.a.median).toLocaleString('da-DK')}</span>
+                        <span className="text-slate-400"> (n={r.a.n})</span>
+                      </>
+                    ) : (
+                      <span className="text-slate-400">– ikke nok data</span>
+                    )}
+                    <div className="text-[10px] text-slate-400">{r.sideA.label}</div>
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums text-xs">
+                    {r.b ? (
+                      <>
+                        <span className="text-slate-700">{Math.round(r.b.median).toLocaleString('da-DK')}</span>
+                        <span className="text-slate-400"> (n={r.b.n})</span>
+                      </>
+                    ) : (
+                      <span className="text-slate-400">– ikke nok data</span>
+                    )}
+                    <div className="text-[10px] text-slate-400">{r.sideB.label}</div>
+                  </td>
+                  <td
+                    className={
+                      'px-3 py-2 text-right tabular-nums font-semibold ' +
+                      (r.gapPct === null
+                        ? 'text-slate-400'
+                        : r.gapPct >= 15
+                        ? 'text-rose-700'
+                        : r.gapPct >= 8
+                        ? 'text-amber-700'
+                        : 'text-slate-500')
+                    }
+                  >
+                    {r.gapPct === null ? '–' : `${r.gapPct.toFixed(1)}%`}
+                  </td>
+                  <td className="px-3 py-2 text-xs">
+                    {r.verdict === 'confirmed' && (
+                      <span className="inline-block rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800">
+                        ✓ Bekræftet barriere
+                      </span>
+                    )}
+                    {r.verdict === 'rejected' && (
+                      <span className="inline-block rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">
+                        ✗ Ikke en reel barriere
+                      </span>
+                    )}
+                    {r.verdict === 'insufficient' && (
+                      <span className="inline-block rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                        ? For lidt data
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-3 text-[11px] leading-relaxed text-slate-500">
+          <strong>Bemærk:</strong> Testen sammenligner kun postnummer-medianer. Reelle barrierer som Søerne og
+          Carlsbergvej deler INDEN i et postnummer og kræver street-level data at teste rigoristisk. Tagensvej
+          mellem 2100 og 2200 viser kun -1.6% — det er ikke et stort spring i de aggregerede tal, men siger
+          ikke noget om gade-niveau på selve Tagensvej.
+        </p>
+      </Section>
+
+      {/* ─── KATEGORI-EKSEMPLER ─────────────────────────────────────────── */}
+      <Section
+        n={5}
         title="Værste enkelt-cases pr. fejl-kategori"
         insight="Specifikke eksempler hvor AVM totalt misser en kategori. Send disse til Lambda-teamet som test-cases — modellen skal kunne flag dem korrekt efter retrain."
       >

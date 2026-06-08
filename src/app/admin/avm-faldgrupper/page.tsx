@@ -200,12 +200,31 @@ export default async function AvmFaldgrupberPage() {
     sideB: { label: string; postnumre: string[] };
   }
   const barrierTests: BarrierTest[] = [
+    // Vest-grænser
     { name: 'Folehaven (Ring 2)', sideA: { label: 'Sydhavn', postnumre: ['2450'] }, sideB: { label: 'Valby', postnumre: ['2500'] } },
     { name: 'Bispeengbuen', sideA: { label: 'Frederiksberg', postnumre: ['2000'] }, sideB: { label: 'Nordvest', postnumre: ['2400'] } },
     { name: 'Borups Allé / Nordvest-grænse', sideA: { label: 'Nørrebro', postnumre: ['2200'] }, sideB: { label: 'Nordvest', postnumre: ['2400'] } },
+    { name: 'Frederikssundsvej (Brønshøj ↔ Vanløse)', sideA: { label: 'Vanløse', postnumre: ['2720'] }, sideB: { label: 'Brønshøj', postnumre: ['2700'] } },
+    { name: 'Nordvest-Brønshøj korridor', sideA: { label: 'Nordvest', postnumre: ['2400'] }, sideB: { label: 'Brønshøj', postnumre: ['2700'] } },
+    { name: 'Roskildevej (Frederiksberg ↔ Vanløse)', sideA: { label: 'Frederiksberg', postnumre: ['2000'] }, sideB: { label: 'Vanløse', postnumre: ['2720'] } },
+
+    // Øst-grænser
     { name: 'Tagensvej / Jagtvej (Østerbro ↔ Nørrebro)', sideA: { label: 'Østerbro', postnumre: ['2100'] }, sideB: { label: 'Nørrebro', postnumre: ['2200'] } },
+    { name: 'Strandboulevarden (Østerbro ↔ Nordhavn)', sideA: { label: 'Nordhavn', postnumre: ['2150'] }, sideB: { label: 'Østerbro', postnumre: ['2100'] } },
     { name: 'Søerne — Indre By ↔ Frederiksberg', sideA: { label: 'Frederiksberg', postnumre: ['2000'] }, sideB: { label: 'Indre By N', postnumre: ['1300', '1400', '1500'] } },
+
+    // Indre By premium
+    { name: 'Indre By premium-akse (Slotsholmen)', sideA: { label: 'Indre By 1436', postnumre: ['1436'] }, sideB: { label: 'Indre By 1302', postnumre: ['1302'] } },
+
+    // Vesterbro internal
+    { name: 'Carlsbergvej / Vesterbro vest-øst', sideA: { label: 'Kalvebod 1799', postnumre: ['1799'] }, sideB: { label: 'Halmtorv 1666', postnumre: ['1666'] } },
+
+    // Amager + havn
+    { name: 'Sydhavnen (Sydhavn ↔ Amager)', sideA: { label: 'Sydhavn', postnumre: ['2450'] }, sideB: { label: 'Amager', postnumre: ['2300'] } },
+
+    // Nord
     { name: 'Strandvejen / Ring 3 (Hellerup ↔ Lyngby)', sideA: { label: 'Hellerup', postnumre: ['2900'] }, sideB: { label: 'Lyngby', postnumre: ['2800'] } },
+    { name: 'Hellerup ↔ Nordhavn (Tuborg-aksen)', sideA: { label: 'Hellerup', postnumre: ['2900'] }, sideB: { label: 'Nordhavn', postnumre: ['2150'] } },
   ];
 
   function aggregatePostnumre(postnumre: string[]): { median: number; n: number } | null {

@@ -8,28 +8,56 @@
 // Strøget + adjacent støj/turist-gader vi vil ekskludere fra core picks.
 // Tilføj her hvis vi finder andre gader vi konsekvent vil filtrere væk.
 const NOISY_STREETS = [
-  // Strøget proper (gågade-shopping)
+  // ─── HØJ STØJ (≥-20% pristraf empirisk målt eller stort trafikkort) ──
+  'Lyngbyvej',                  // -34.9% målt (motorvej-feeder)
+  'Folehaven',                  // -30.1% målt (Ring 2)
+  'Bispeengen',                 // Bispeengbuen — hævet motorvej
+  'Åboulevard',                 // Bispeengbuens fortsættelse
+  'H.C. Andersens Boulevard',   // 6 spor trafik
+  'Borups Allé',                // Nordvest-grænse
+  'Vesterbrogade',
+  'Nørrebrogade',
+  'Amagerbrogade',              // -7.2% målt
+  'Strandvejen',
+  'Istedgade',
+  'Halmtorvet',
+
+  // ─── MELLEM STØJ ──────────────────────────────────────────────────────
+  'Jagtvej',                    // Gammel bygrænse, central trafik
+  'Tagensvej',                  // -9.8% målt
+  'Frederikssundsvej',          // -7.0% målt
+  'Falkoner Allé',              // Frederiksberg central trafik
+  'Roskildevej',                // Frederiksberg → Valby
+  'Englandsvej',                // Amager-hovedgade
+  'Sundbyvestervej',            // Amager
+  'Vigerslev Allé',             // Valby
+  'Sjælør Boulevard',           // Sydhavn
+  'Gammel Kongevej',            // Frederiksberg/Vesterbro grænse
+  'Smallegade',                 // Frederiksberg
+  'Søndre Fasanvej',            // Frederiksberg vest
+  'Vester Voldgade',            // Indre By voldring
+  'Nørre Voldgade',
+  'Øster Voldgade',
+  'Tomsgårdsvej',               // Nordvest
+
+  // ─── TURIST + NATTELIV ────────────────────────────────────────────────
   'Frederiksberggade',
   'Nygade',
   'Vimmelskaftet',
   'Amagertorv',
   'Østergade',
   'Strøget',
-  // Strøget-tilstødende kvarterer
   'Købmagergade',
   'Pilestræde',
-  // Tourist + nattelivshotspots
   'Nyhavn',
   'Strandgade',
   'Gothersgade',
-  // Store trafik-gader
-  'Vesterbrogade',
-  'Nørrebrogade',
-  'Amagerbrogade',
-  'Strandvejen',
-  'Istedgade',
-  'Halmtorvet',
+
+  // ─── STATIONS-AKSEN (Hovedbanen + S-tog) ──────────────────────────────
   'Vesterport',
+  'Reventlowsgade',
+  'Tietgensgade',
+  'Helgolandsgade',
 ];
 
 const NOISY_PATTERN = new RegExp(

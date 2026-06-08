@@ -278,6 +278,61 @@ export default async function AvmFaldgrupberPage() {
     return { ...t, a, b, gapPct, verdict };
   });
 
+  // ─── STREET-NOISE TEST ────────────────────────────────────────────────
+  // Beregn pristraf for gader baseret på hvad der står i adresse-strengen.
+  // Sammenlign gade-handler vs postnummer-median.
+  const allSales12m_streets = await db
+    .select({
+      address: externalSales.address,
+      postalCode: externalSales.postalCode,
+      perAreaPrice: externalSales.perAreaPrice,
+      amount: externalSales.amount,
+      kvm: externalSales.kvm,
+    })
+    .from(externalSales)
+    .where(gte(externalSales.saleDate, cutoff12mStr));
+
+  const noiseStreets = [
+    'Lyngbyvej', 'Folehaven', 'Bispeengen', 'Åboulevard', 'H.C. Andersens',
+    'Borups Allé', 'Vesterbrogade', 'Nørrebrogade', 'Amagerbrogade',
+    'Strandvejen', 'Istedgade', 'Halmtorvet',
+    'Jagtvej', 'Tagensvej', 'Frederikssundsvej', 'Falkoner Allé',
+    'Roskildevej', 'Englandsvej', 'Sundbyvestervej', 'Vigerslev Allé',
+    'Sjælør Boulevard', 'Gammel Kongevej', 'Smallegade', 'Søndre Fasanvej',
+    'Vester Voldgade', 'Nørre Voldgade', 'Tomsgårdsvej',
+    'Frederiksberggade', 'Strøget', 'Købmagergade', 'Nyhavn',
+    'Strandgade', 'Gothersgade', 'Vesterport',
+  ];
+
+  const streetResults = noiseStreets.map((street) => {
+    const matches = allSales12m_streets.filter(
+      (s) => s.address.toLowerCase().includes(street.toLowerCase()) && s.kvm && s.kvm >= 40 && s.kvm <= 110,
+    );
+    if (matches.length < 3) return null;
+    const ppms = matches.map((s) => s.perAreaPrice ?? s.amount / s.kvm!);
+    const streetAvg = ppms.reduce((a, b) => a + b, 0) / ppms.length;
+    // Find postnummer-median for hver case og avg det
+    const postMedians: number[] = [];
+    for (const m of matches) {
+      const arr = postnrPpm.get(m.postalCode);
+      if (arr && arr.length >= 5) {
+        const sorted = [...arr].sort((a, b) => a - b);
+        postMedians.push(sorted[Math.floor(sorted.length / 2)]);
+      }
+    }
+    if (postMedians.length === 0) return null;
+    const postAvg = postMedians.reduce((a, b) => a + b, 0) / postMedians.length;
+    const effectPct = ((streetAvg - postAvg) / postAvg) * 100;
+    return {
+      street,
+      n: matches.length,
+      streetAvg: Math.round(streetAvg),
+      postAvg: Math.round(postAvg),
+      effectPct,
+    };
+  }).filter((r): r is NonNullable<typeof r> => r !== null);
+  streetResults.sort((a, b) => a.effectPct - b.effectPct);
+
   // ─── KATEGORI-EKSEMPLER: top fejl per kategori ─────────────────────────
   const categoryExamples = {
     stueetage: rows.filter((r) => isGroundFloor(r.address) && (r.v3Alpha ?? 0) > 0).sort((a, b) => (b.v3Alpha ?? 0) - (a.v3Alpha ?? 0)).slice(0, 3),
@@ -540,9 +595,89 @@ export default async function AvmFaldgrupberPage() {
         </p>
       </Section>
 
+      {/* ─── PATTERN 5: Støjende gader — empirisk pristest ─────────────── */}
+      {streetResults.length > 0 && (
+        <Section
+          n={5}
+          title="Støjende gader — empirisk pristraf"
+          insight="Sammenligner gns. ppm på specifikke gader vs gns. ppm for samme postnummer. Negativ % = gaden er billigere end andre adresser i samme postnummer = reel støj-rabat. AVM-modellen kan bruge dette til at lære 'noise_level' som lav/mellem/høj feature pr. gade."
+        >
+          <div className="overflow-hidden rounded-lg border border-slate-200">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-left text-[11px] font-medium uppercase tracking-wider text-slate-500">
+                <tr>
+                  <th className="px-3 py-2">Gade</th>
+                  <th className="px-3 py-2 text-right">Gade gns.</th>
+                  <th className="px-3 py-2 text-right">Postnr-median</th>
+                  <th className="px-3 py-2 text-right">Effekt</th>
+                  <th className="px-3 py-2 text-right">n</th>
+                  <th className="px-3 py-2">Niveau</th>
+                </tr>
+              </thead>
+              <tbody>
+                {streetResults.map((r) => (
+                  <tr key={r.street} className="border-t border-slate-100">
+                    <td className="px-3 py-2 font-medium text-slate-900">{r.street}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-xs text-slate-600">
+                      {r.streetAvg.toLocaleString('da-DK')}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-xs text-slate-400">
+                      {r.postAvg.toLocaleString('da-DK')}
+                    </td>
+                    <td
+                      className={
+                        'px-3 py-2 text-right tabular-nums font-semibold ' +
+                        (r.effectPct <= -20
+                          ? 'text-rose-700'
+                          : r.effectPct <= -7
+                          ? 'text-amber-700'
+                          : r.effectPct <= -2
+                          ? 'text-slate-600'
+                          : 'text-emerald-600')
+                      }
+                    >
+                      {r.effectPct >= 0 ? '+' : ''}
+                      {r.effectPct.toFixed(1)}%
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-xs text-slate-500">{r.n}</td>
+                    <td className="px-3 py-2">
+                      {r.effectPct <= -20 && (
+                        <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-medium text-rose-800">
+                          🔴 Høj støj
+                        </span>
+                      )}
+                      {r.effectPct > -20 && r.effectPct <= -7 && (
+                        <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
+                          🟠 Mellem støj
+                        </span>
+                      )}
+                      {r.effectPct > -7 && r.effectPct <= -2 && (
+                        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">
+                          🟡 Lav støj
+                        </span>
+                      )}
+                      {r.effectPct > -2 && (
+                        <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
+                          ✓ Intet pristraf
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-3 text-[11px] leading-relaxed text-slate-500">
+            <strong>Tiered noise-niveau forslag til AVM:</strong> Mads' model bruger lav/mellem/høj/null skala
+            — denne empiriske test giver ham et udgangspunkt: gader med ≥-20% effekt = høj, -7% til -20% = mellem,
+            -2% til -7% = lav. Bemærk at små samples (n&lt;5) er statistisk usikre — behandl dem som hints, ikke fakta.
+          </p>
+        </Section>
+      )}
+
       {/* ─── KATEGORI-EKSEMPLER ─────────────────────────────────────────── */}
       <Section
-        n={5}
+        n={6}
         title="Værste enkelt-cases pr. fejl-kategori"
         insight="Specifikke eksempler hvor AVM totalt misser en kategori. Send disse til Lambda-teamet som test-cases — modellen skal kunne flag dem korrekt efter retrain."
       >

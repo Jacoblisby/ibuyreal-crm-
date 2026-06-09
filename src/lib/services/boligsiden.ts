@@ -159,11 +159,16 @@ export interface SearchOptions {
   maxPagesPerBatch?: number;
 }
 
+// VIGTIGT: zipCodeBatchSize × ~50 cases × maxPagesPerBatch skal være større
+// end faktisk antal cases. KBH+Frb har ~1500 aktive ejerlejligheder fordelt på
+// 523 postnumre. Gamle config (30 postnumre × 10 sider = 500 cases pr. batch)
+// missede nye listings i store postnumre (2000 Frb, 2100 Ø, 2200 N) fordi
+// batch'en var fyldt med ældre.
 const DEFAULTS: Required<Pick<SearchOptions, 'minRooms' | 'maxRooms' | 'zipCodeBatchSize' | 'maxPagesPerBatch'>> = {
   minRooms: 2,
   maxRooms: 3,
-  zipCodeBatchSize: 30,
-  maxPagesPerBatch: 10,
+  zipCodeBatchSize: 10,
+  maxPagesPerBatch: 20,
 };
 
 function classifyBroker(url: string | null): string {

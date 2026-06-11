@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import type { OnMarketCandidate, ScrapeJob } from '@/lib/db/schema';
 import { curatedScore, pickCurated } from '@/lib/curation';
@@ -82,7 +82,31 @@ export function OnMarketClient({
   const router = useRouter();
   const [rows] = useState(initial);
   const [scraping, setScraping] = useState(false);
+
+  // Filter-state med sessionStorage-persistens så bruger ikke skal vælge
+  // filtre igen efter at have klikket ind på en case og tilbage.
+  // Bruger sessionStorage (ikke localStorage) så ny tab/session får default.
+  const STATE_KEY = 'on-market-filters-v1';
   const [s, setS] = useState<State>(DEFAULT_STATE);
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(STATE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<State>;
+        setS({ ...DEFAULT_STATE, ...parsed });
+      }
+    } catch {
+      // ignore parse errors
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(STATE_KEY, JSON.stringify(s));
+    } catch {
+      // quota or disabled — ignore
+    }
+  }, [s]);
 
   // Beregn preset-counts altid (uafhængigt af andre filtre) til pill-badges.
   // Default skjules stueetage + hjemfaldspligt — kan vises via toggle.
@@ -431,7 +455,10 @@ export function OnMarketClient({
             <span className="text-slate-400"> / {rows.length}</span>
           </span>
           <button
-            onClick={() => setS(DEFAULT_STATE)}
+            onClick={() => {
+              setS(DEFAULT_STATE);
+              try { sessionStorage.removeItem(STATE_KEY); } catch {}
+            }}
             className="rounded-md px-2 py-1 text-xs text-slate-500 transition-colors duration-150 ease-[var(--ease-out)] hover:bg-slate-100 hover:text-slate-900 active:scale-[0.97]"
           >
             Nulstil

@@ -234,6 +234,10 @@ export async function runScrapeJob(opts: ScrapeRunOptions = {}): Promise<ScrapeR
           id: onMarketCandidates.id,
           status: onMarketCandidates.status,
           manualFmv: onMarketCandidates.manualFmv,
+          hjemfaldspligt: onMarketCandidates.hjemfaldspligt,
+          hjemfaldspligtNote: onMarketCandidates.hjemfaldspligtNote,
+          handymanListing: onMarketCandidates.handymanListing,
+          handymanListingNote: onMarketCandidates.handymanListingNote,
         })
         .from(onMarketCandidates)
         .where(

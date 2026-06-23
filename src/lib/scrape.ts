@@ -23,6 +23,33 @@ import {
 import { estimateFmv, fetchAvmBatch, type AvmPrediction } from './avm';
 import type { Bydel } from './types';
 
+/**
+ * Auto-detekt hjemfaldspligt fra Boligsiden-beskrivelse + titel.
+ *
+ * Mæglere er ret pligtige til at oplyse hjemfaldspligt i prospektet,
+ * og bruger typisk ordene "hjemfaldspligt" eller "hjemfaldsret".
+ * Vi extracter også et udløbsår hvis det står i nærheden.
+ *
+ * Returnerer kun hjemfaldspligt=true. Hvis vi senere finder ud af
+ * det var fejldetektion kan bruger toggle den OFF manuelt — vores
+ * UI bevarer "manuelt sat" så scrape ikke overskriver det.
+ */
+function detectHjemfaldspligt(
+  description: string | null | undefined,
+  title: string | null | undefined,
+): { hjemfaldspligt?: boolean; hjemfaldspligtNote?: string } {
+  const text = `${title ?? ''}\n${description ?? ''}`.toLowerCase();
+  if (!/\b(hjemfaldspligt|hjemfaldsret|hjemfalds-?ret)\b/.test(text)) {
+    return {};
+  }
+  // Forsøg at extracte udløbsår (typisk firecifret 2050-2100)
+  const yearMatch = text.match(/hjemfald[\s\S]{0,80}?(20\d{2})/);
+  const note = yearMatch
+    ? `Auto-detected fra beskrivelse — udløb ${yearMatch[1]}`
+    : 'Auto-detected fra beskrivelse';
+  return { hjemfaldspligt: true, hjemfaldspligtNote: note };
+}
+
 export interface ScrapeRunResult {
   jobId: string;
   scraped: number;
@@ -221,6 +248,7 @@ export async function runScrapeJob(opts: ScrapeRunOptions = {}): Promise<ScrapeR
         lastSaleAmount: lastNormalSale?.amount ?? null,
         publicValuation: history?.publicValuation ?? null,
         ...(v3 ?? {}),
+        ...detectHjemfaldspligt(l.description, l.descriptionTitle),
         lastSeenAt: new Date(),
         status: 'active',
       };
@@ -234,10 +262,23 @@ export async function runScrapeJob(opts: ScrapeRunOptions = {}): Promise<ScrapeR
         // den fx var 'sold' og er kommet tilbage på markedet.
         const preservedStatus =
           existing[0].status === 'ignored' ? 'ignored' : values.status;
+        // Bevar manuelt-sat hjemfaldspligt: hvis bruger allerede har
+        // taget stilling (true ELLER false med ikke-auto note), så lader
+        // vi det stå. Scrape må kun ADD'e hjemfald, ikke fjerne det.
+        const noteIsAutoDetected = (existing[0].hjemfaldspligtNote ?? '').startsWith('Auto-detected');
+        const userHasDecided =
+          existing[0].hjemfaldspligt === true && !noteIsAutoDetected;
+        const preserveHjemfald = userHasDecided
+          ? {
+              hjemfaldspligt: existing[0].hjemfaldspligt,
+              hjemfaldspligtNote: existing[0].hjemfaldspligtNote,
+            }
+          : {};
         await db
           .update(onMarketCandidates)
           .set({
             ...values,
+            ...preserveHjemfald,
             status: preservedStatus,
             updatedAt: new Date(),
             soldAt: existing[0].status === 'sold' ? null : undefined,

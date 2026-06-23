@@ -47,6 +47,15 @@ export function diagnoseCase(
       weight: 100,
     });
   }
+  if (c.handymanListing) {
+    flags.push({
+      level: 'fail',
+      label: 'Håndværker',
+      detail: `Mæglerens beskrivelse signalerer fixer-upper${c.handymanListingNote ? ` (${c.handymanListingNote})` : ''}. Skjules fra Top picks.`,
+      category: 'safety',
+      weight: 98,
+    });
+  }
   if (isGroundFloor(c.address)) {
     flags.push({
       level: 'fail',

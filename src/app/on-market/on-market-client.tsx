@@ -111,7 +111,9 @@ export function OnMarketClient({
   // Beregn preset-counts altid (uafhængigt af andre filtre) til pill-badges.
   // Default skjules stueetage + hjemfaldspligt — kan vises via toggle.
   const isDisqualified = (x: OnMarketCandidate): boolean =>
-    isGroundFloor(x.address) || x.hjemfaldspligt === true;
+    isGroundFloor(x.address) ||
+    x.hjemfaldspligt === true ||
+    x.handymanListing === true;
   const disqualifiedCount = useMemo(
     () => rows.filter((x) => x.status === 'active' && isDisqualified(x)).length,
     [rows],
@@ -438,7 +440,7 @@ export function OnMarketClient({
 
         <label
           className="inline-flex cursor-pointer select-none items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-slate-600 transition-colors duration-150 ease-[var(--ease-out)] hover:bg-slate-100"
-          title={`${disqualifiedCount} cases er stueetage eller markeret med hjemfaldspligt — skjult som default`}
+          title={`${disqualifiedCount} cases er stueetage, hjemfaldspligt eller håndværkertilbud — skjult som default`}
         >
           <input
             type="checkbox"
@@ -446,7 +448,7 @@ export function OnMarketClient({
             onChange={(e) => setS((p) => ({ ...p, showDisqualified: e.target.checked }))}
             className="h-3.5 w-3.5 cursor-pointer accent-slate-900"
           />
-          Vis stuen + hjemfald ({disqualifiedCount})
+          Vis stuen + hjemfald + håndværker ({disqualifiedCount})
         </label>
 
         <div className="ml-auto flex items-center gap-3">

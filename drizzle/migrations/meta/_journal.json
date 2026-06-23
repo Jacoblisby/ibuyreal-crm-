@@ -78,6 +78,13 @@
       "when": 1779436803388,
       "tag": "0010_solid_mach_iv",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1782203837384,
+      "tag": "0011_wonderful_apocalypse",
+      "breakpoints": true
     }
   ]
 }

@@ -34,6 +34,41 @@ import type { Bydel } from './types';
  * det var fejldetektion kan bruger toggle den OFF manuelt — vores
  * UI bevarer "manuelt sat" så scrape ikke overskriver det.
  */
+/**
+ * Auto-detekt håndværkertilbud / fixer-upper fra Boligsiden-beskrivelse.
+ *
+ * Specifikke nøgleord der har lav false-positive rate:
+ *   - "håndværkertilbud" (specifik mæglerbetegnelse)
+ *   - "kræver renovering" / "trænger til renovering"
+ *   - "som besigtiget" / "som beset" (mæglerformulering der signalerer "ingen garantier")
+ *   - "stor renoveringsopgave"
+ *
+ * Vi MATCHER IKKE generic "renovering" alene fordi det ofte refererer til
+ * bygnings-vedligehold (facade, vinduer m.fl.) som er positivt signal.
+ */
+function detectHandyman(
+  description: string | null | undefined,
+  title: string | null | undefined,
+): { handymanListing?: boolean; handymanListingNote?: string } {
+  const text = `${title ?? ''}\n${description ?? ''}`.toLowerCase();
+  const patterns: Array<{ rx: RegExp; label: string }> = [
+    { rx: /\bhåndværker-?tilbud\b/, label: 'håndværkertilbud' },
+    { rx: /\b(kræver|trænger til) (en )?(total ?)?(istandsættelse|renovering|opdatering)\b/, label: 'kræver renovering' },
+    { rx: /\bsom (besigtiget|beset)\b/, label: 'som besigtiget' },
+    { rx: /\bstor renoveringsopgave\b/, label: 'stor renoveringsopgave' },
+    { rx: /\bfuld(?:t)? istandsættelse(?:s|n)?\b/, label: 'fuld istandsættelse' },
+  ];
+  for (const { rx, label } of patterns) {
+    if (rx.test(text)) {
+      return {
+        handymanListing: true,
+        handymanListingNote: `Auto-detected: "${label}" i beskrivelse`,
+      };
+    }
+  }
+  return {};
+}
+
 function detectHjemfaldspligt(
   description: string | null | undefined,
   title: string | null | undefined,
@@ -249,6 +284,7 @@ export async function runScrapeJob(opts: ScrapeRunOptions = {}): Promise<ScrapeR
         publicValuation: history?.publicValuation ?? null,
         ...(v3 ?? {}),
         ...detectHjemfaldspligt(l.description, l.descriptionTitle),
+        ...detectHandyman(l.description, l.descriptionTitle),
         lastSeenAt: new Date(),
         status: 'active',
       };
@@ -265,13 +301,20 @@ export async function runScrapeJob(opts: ScrapeRunOptions = {}): Promise<ScrapeR
         // Bevar manuelt-sat hjemfaldspligt: hvis bruger allerede har
         // taget stilling (true ELLER false med ikke-auto note), så lader
         // vi det stå. Scrape må kun ADD'e hjemfald, ikke fjerne det.
-        const noteIsAutoDetected = (existing[0].hjemfaldspligtNote ?? '').startsWith('Auto-detected');
-        const userHasDecided =
-          existing[0].hjemfaldspligt === true && !noteIsAutoDetected;
-        const preserveHjemfald = userHasDecided
+        // Manuel-toggle preservation: hvis bruger har taget stilling
+        // (note der IKKE starter med "Auto-detected") så bevares værdien.
+        const hjemfaldNoteAuto = (existing[0].hjemfaldspligtNote ?? '').startsWith('Auto-detected');
+        const handymanNoteAuto = (existing[0].handymanListingNote ?? '').startsWith('Auto-detected');
+        const preserveHjemfald = existing[0].hjemfaldspligt === true && !hjemfaldNoteAuto
           ? {
               hjemfaldspligt: existing[0].hjemfaldspligt,
               hjemfaldspligtNote: existing[0].hjemfaldspligtNote,
+            }
+          : {};
+        const preserveHandyman = existing[0].handymanListing === true && !handymanNoteAuto
+          ? {
+              handymanListing: existing[0].handymanListing,
+              handymanListingNote: existing[0].handymanListingNote,
             }
           : {};
         await db
@@ -279,6 +322,7 @@ export async function runScrapeJob(opts: ScrapeRunOptions = {}): Promise<ScrapeR
           .set({
             ...values,
             ...preserveHjemfald,
+            ...preserveHandyman,
             status: preservedStatus,
             updatedAt: new Date(),
             soldAt: existing[0].status === 'sold' ? null : undefined,

@@ -321,6 +321,15 @@ export const onMarketCandidates = pgTable(
     hjemfaldspligtNote: text('hjemfaldspligt_note'),
 
     /**
+     * Håndværkertilbud / fixer-upper flag. Auto-detekteres fra mæglerens
+     * beskrivelse (typisk ordet "håndværkertilbud" eller "kræver renovering"
+     * i title/description). Bruger kan toggle manuelt og det bevares.
+     * Hvis true skjules casen fra on-market-listen + Top picks.
+     */
+    handymanListing: boolean('handyman_listing').notNull().default(false),
+    handymanListingNote: text('handyman_listing_note'),
+
+    /**
      * Manuel pin-flag: tvang inkluder casen på Top picks selv hvis
      * den dumper auto-gates (beton-æra, α, median-comp etc.).
      * Bevarer dog stueetage + hjemfaldspligt + ignored som hard safety.

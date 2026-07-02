@@ -74,7 +74,18 @@ function detectHjemfaldspligt(
   title: string | null | undefined,
 ): { hjemfaldspligt?: boolean; hjemfaldspligtNote?: string } {
   const text = `${title ?? ''}\n${description ?? ''}`.toLowerCase();
-  if (!/\b(hjemfaldspligt|hjemfaldsret|hjemfalds-?ret)\b/.test(text)) {
+  const m = text.match(/\b(hjemfaldspligt|hjemfaldsret|hjemfalds-?ret)\b/);
+  if (!m || m.index === undefined) {
+    return {};
+  }
+  // NEGATION: "der er INGEN hjemfaldspligt" / "uden hjemfaldspligt" må ikke flagge.
+  const before = text.slice(Math.max(0, m.index - 45), m.index);
+  if (/\b(ingen|ikke|uden|fri for)\b[\s\S]{0,30}$/.test(before)) {
+    return {};
+  }
+  // RESOLUTION: "hjemfaldspligten er frikøbt/afløst/indfriet" = ikke længere aktiv.
+  const after = text.slice(m.index, m.index + 120);
+  if (/\b(frikøbt|afløst|indfriet|aflyst)\b/.test(after)) {
     return {};
   }
   // Forsøg at extracte udløbsår (typisk firecifret 2050-2100)
@@ -83,6 +94,37 @@ function detectHjemfaldspligt(
     ? `Auto-detected fra beskrivelse — udløb ${yearMatch[1]}`
     : 'Auto-detected fra beskrivelse';
   return { hjemfaldspligt: true, hjemfaldspligtNote: note };
+}
+
+/**
+ * Hent mæglerens egen case-side og returner rå tekst (tags strippet).
+ *
+ * NØDVENDIGT fordi Boligsidens API trunkerer descriptionBody til 500 tegn —
+ * "OBS! Lejlighed med Hjemfaldspligt" står ofte længere nede i teksten og
+ * findes kun på mæglersiden (Nybolig, Home, EDC m.fl.).
+ *
+ * Kaldes kun for NYE listings (én gang per case) for at holde volumen nede.
+ */
+async function fetchCaseFullText(caseUrl: string | null): Promise<string | null> {
+  if (!caseUrl) return null;
+  try {
+    const res = await fetch(caseUrl, {
+      headers: {
+        'user-agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
+      },
+      redirect: 'follow',
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) return null;
+    const raw = await res.text();
+    return raw
+      .replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ');
+  } catch {
+    return null;
+  }
 }
 
 export interface ScrapeRunResult {
@@ -310,7 +352,17 @@ export async function runScrapeJob(opts: ScrapeRunOptions = {}): Promise<ScrapeR
       };
 
       if (existing.length === 0) {
-        await db.insert(onMarketCandidates).values(values);
+        // Deep-scan mæglersiden for NYE listings: Boligsiden trunkerer
+        // beskrivelsen til 500 tegn, så hjemfald/håndværker-signaler kan
+        // være skåret væk. Fuld tekst hentes én gang fra caseUrl.
+        const fullText = await fetchCaseFullText(l.caseUrl);
+        const deepFlags = fullText
+          ? {
+              ...detectHjemfaldspligt(fullText, null),
+              ...detectHandyman(fullText, null),
+            }
+          : {};
+        await db.insert(onMarketCandidates).values({ ...values, ...deepFlags });
         newListings++;
       } else {
         // Bevar 'ignored' — bruger har aktivt markeret denne case som

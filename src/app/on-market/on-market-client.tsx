@@ -61,7 +61,7 @@ const PRESET_LABEL: Record<Preset, { label: string; desc: string }> = {
   curated: {
     label: 'Top picks',
     desc:
-      'Cases hvor friske handler i samme område bekræfter et godt køb. Ingen stueetage, ingen hjemfald, ingen 1950–1990 betonejendomme, ingen støjgader, lejligheden i god stand.',
+      'Top 20 cases rangeret efter samlet kvalitet (α + markeds-bevis + stand + byggeår). Ingen stueetage, ingen hjemfald, ingen håndværkertilbud, ingen 1950–1990 betonejendomme, ingen støjgader. Cases nederst er svagere — brug diagnose-chips til at vurdere.',
   },
   fallback: { label: 'Mangler AVM', desc: 'Kun cases hvor modellen ikke kunne predicte' },
 };
@@ -128,7 +128,7 @@ export function OnMarketClient({
 
   const curatedTop20 = useMemo(
     () =>
-      pickCurated(activeRows, 15, {
+      pickCurated(activeRows, 20, {
         strongFreshMap: strongFreshMapServer,
         calibration,
       }),

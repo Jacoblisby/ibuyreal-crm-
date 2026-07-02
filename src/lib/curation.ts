@@ -322,21 +322,48 @@ export function pickCurated(
         confidenceReason: conf.reason,
       };
     })
-    // Median-comp gate: kan også bypasses af topPickOverride.
+    // Ingen hard median-gate eller confidence-gate mere.
+    // Vi bruger begge som SCORING-input i sorteringen nedenfor,
+    // og lader top 20 cases komme igennem uanset marginer.
+    // Undtagelse: median under 75% af udbud er så stor uenighed
+    // med markedet at vi dropper (uden pin).
     .filter((c) => {
       if (c.topPickOverride) return true;
       const agg = c.strongFreshAggregate;
-      if (!agg.medianPpm || !c.kvm || !c.listPrice) return false;
+      if (!agg.medianPpm || !c.kvm || !c.listPrice) return true; // ingen comps → OK, ranked lavt
       const listPpm = c.listPrice / c.kvm;
-      return agg.medianPpm >= listPpm * medianThreshold;
-    })
-    // Confidence-gate: drop low-confidence cases (kan bypasses af topPickOverride).
-    .filter((c) => {
-      if (c.topPickOverride) return true;
-      if (!requireConfidence) return true;
-      return c.confidence !== 'low' && c.confidence !== 'none';
+      return agg.medianPpm >= listPpm * 0.75; // hard floor: median må max være 25% under udbud
     });
 
-  scored.sort((a, b) => b.score.total - a.score.total);
+  // Sorter efter composite-score: kombinerer α, median-support, comp-antal, stand.
+  // Højere score = bedre pick.
+  function compositeScore(c: typeof scored[number]): number {
+    const alphaPct = (c.v3Alpha ?? 0) * 100;
+    const alphaPts = Math.min(alphaPct * 3, 30); // 10% α = 30 pt, cap ved 30
+
+    const agg = c.strongFreshAggregate;
+    let medianPts = 0;
+    if (agg.medianPpm && c.kvm && c.listPrice) {
+      const ratio = agg.medianPpm / (c.listPrice / c.kvm);
+      // ratio 1.0 = 20 pt, 1.3 = 26 pt, 0.85 = 17 pt, 0.75 = 15 pt
+      medianPts = Math.max(0, Math.min(ratio * 20, 30));
+    }
+
+    // Comp-count: mere data = mere tillid til median-signalet
+    const compPts = Math.min(agg.count / 10, 1) * 15; // cap ved 10 comps = 15 pt
+
+    // Stand (hvis vurderet)
+    const standPts = c.imageAssessment
+      ? (c.imageAssessment.overall_condition / 10) * 15
+      : 7; // neutral 7 pt hvis ikke vurderet endnu
+
+    // Byggeår-bonus
+    const yb = c.yearBuilt ?? 0;
+    const yearPts = yb >= 2000 ? 5 : yb >= 1900 && yb < 1950 ? 5 : yb === 0 ? 0 : 2;
+
+    return alphaPts + medianPts + compPts + standPts + yearPts;
+  }
+  scored.sort((a, b) => compositeScore(b) - compositeScore(a));
   return scored.slice(0, n);
 }
+

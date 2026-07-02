@@ -238,6 +238,8 @@ export async function runScrapeJob(opts: ScrapeRunOptions = {}): Promise<ScrapeR
           hjemfaldspligtNote: onMarketCandidates.hjemfaldspligtNote,
           handymanListing: onMarketCandidates.handymanListing,
           handymanListingNote: onMarketCandidates.handymanListingNote,
+          avmPricePerSqm: onMarketCandidates.avmPricePerSqm,
+          avmUnitUuid: onMarketCandidates.avmUnitUuid,
         })
         .from(onMarketCandidates)
         .where(
@@ -249,7 +251,21 @@ export async function runScrapeJob(opts: ScrapeRunOptions = {}): Promise<ScrapeR
 
       // Hvis brugeren har sat en manuel FMV, vinder den over AVM ved genberegning.
       const manualFmv = existing[0]?.manualFmv ?? null;
-      const v3 = runV3OnListing(l, bydel, avmPrediction, manualFmv);
+
+      // STICKY AVM: hvis dagens AVM-kald ikke gav prediction (Lambda-batch
+      // fejlede eller flaky), genbrug seneste kendte AVM-værdi i stedet for
+      // at falde tilbage til listPris. Uden dette mister cases deres alpha
+      // hver gang en batch fejler — Top picks kollapser tilfældigt.
+      const effectivePrediction: AvmPrediction | undefined =
+        avmPrediction ??
+        (existing[0]?.avmPricePerSqm
+          ? {
+              pricePerSqm: existing[0].avmPricePerSqm,
+              unitUuid: existing[0].avmUnitUuid ?? null,
+            }
+          : undefined);
+
+      const v3 = runV3OnListing(l, bydel, effectivePrediction, manualFmv);
 
       // Historik fra Boligsiden /addresses/{uuid}
       const history = l.addressId ? historyMap.get(l.addressId) : undefined;

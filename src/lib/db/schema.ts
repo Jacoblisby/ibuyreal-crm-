@@ -307,7 +307,11 @@ export const onMarketCandidates = pgTable(
 
     // Status
     status: text('status').notNull().default('active'), // active | sold | ignored
-    reviewStatus: text('review_status').notNull().default('ny'), // ny | interesseret | passet | importeret
+    reviewStatus: text('review_status').notNull().default('ny'), // ny | interesseret | passet | senere | importeret
+    /** Hvorfor blev casen passet? Sat via triage-inbox. pris | stand | beliggenhed | andet */
+    passReason: text('pass_reason'),
+    /** Hvornår brugeren sidst tog stilling (triage-handling) */
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
 
     /**
      * Manuel disqualify-flag for hjemfaldspligt (leasehold-reversion).

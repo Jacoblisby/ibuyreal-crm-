@@ -309,6 +309,35 @@ export function OnMarketClient({
         </button>
       </div>
 
+      {/* Triage-banner: kandidater der venter på stilling */}
+      {(() => {
+        const untriaged = curatedTop20.filter((c) => c.reviewStatus === 'ny').length;
+        if (untriaged === 0) return null;
+        return (
+          <a
+            href="/on-market/triage"
+            className="group flex items-center justify-between rounded-xl border border-blue-200/70 bg-gradient-to-r from-blue-50 to-white px-4 py-3 shadow-sm transition-[box-shadow,transform] duration-150 ease-[var(--ease-out)] hover:shadow-md active:scale-[0.995]"
+          >
+            <div className="flex items-center gap-3">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
+                {untriaged}
+              </span>
+              <div>
+                <div className="text-sm font-semibold text-blue-900">
+                  {untriaged} kandidat{untriaged === 1 ? '' : 'er'} venter på din stilling
+                </div>
+                <div className="text-xs text-blue-700/70">
+                  Gennemgå én ad gangen — Interesseret · Pas · Senere
+                </div>
+              </div>
+            </div>
+            <span className="text-sm font-medium text-blue-700 transition-transform duration-150 ease-[var(--ease-out)] group-hover:translate-x-0.5">
+              Start triage →
+            </span>
+          </a>
+        );
+      })()}
+
       {/* Preset pills */}
       <div className="flex flex-wrap items-center gap-2">
         {(['all', 'curated', 'fallback'] as Preset[]).map((p) => {

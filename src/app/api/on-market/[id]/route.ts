@@ -7,7 +7,8 @@ import { onMarketCandidates } from '@/lib/db/schema';
 import type { Bydel } from '@/lib/types';
 
 const patchSchema = z.object({
-  reviewStatus: z.enum(['ny', 'interesseret', 'passet', 'importeret']).optional(),
+  reviewStatus: z.enum(['ny', 'interesseret', 'passet', 'senere', 'importeret']).optional(),
+  passReason: z.enum(['pris', 'stand', 'beliggenhed', 'andet']).nullable().optional(),
   status: z.enum(['active', 'sold', 'ignored']).optional(),
   manualFmv: z.number().positive().nullable().optional(),
   manualFmvNote: z.string().nullable().optional(),
@@ -37,6 +38,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     ...parsed.data,
     updatedAt: new Date(),
   };
+
+  // Triage-handling: stempl reviewedAt når bruger tager stilling
+  if ('reviewStatus' in parsed.data) {
+    baseUpdate.reviewedAt = new Date();
+  }
 
   if ('manualFmv' in parsed.data) {
     const [existing] = await db

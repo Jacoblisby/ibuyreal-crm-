@@ -69,6 +69,20 @@ function detectHandyman(
   return {};
 }
 
+/**
+ * Auto-detekt husbåde/flydende boliger. De sælges som "ejerlejlighed" på
+ * Boligsiden men er helt uden for fondens scope (AVM kan ikke prise dem,
+ * andet finansierings- og risikoprofil). Detekterede cases sættes direkte
+ * til status='ignored' så de aldrig optræder i listen.
+ */
+function detectHouseboat(
+  description: string | null | undefined,
+  title: string | null | undefined,
+): boolean {
+  const text = `${title ?? ''}\n${description ?? ''}`.toLowerCase();
+  return /\b(husbåd|husbaad|flydende bolig|beboelsesflåde|houseboat)\b/.test(text);
+}
+
 function detectHjemfaldspligt(
   description: string | null | undefined,
   title: string | null | undefined,
@@ -351,6 +365,9 @@ export async function runScrapeJob(opts: ScrapeRunOptions = {}): Promise<ScrapeR
         status: 'active',
       };
 
+      // Husbåde er uden for scope — sæt direkte til 'ignored'.
+      const isHouseboat = detectHouseboat(l.description, l.descriptionTitle);
+
       if (existing.length === 0) {
         // Deep-scan mæglersiden for NYE listings: Boligsiden trunkerer
         // beskrivelsen til 500 tegn, så hjemfald/håndværker-signaler kan
@@ -362,14 +379,20 @@ export async function runScrapeJob(opts: ScrapeRunOptions = {}): Promise<ScrapeR
               ...detectHandyman(fullText, null),
             }
           : {};
-        await db.insert(onMarketCandidates).values({ ...values, ...deepFlags });
+        const deepHouseboat = isHouseboat || (fullText ? detectHouseboat(fullText, null) : false);
+        await db.insert(onMarketCandidates).values({
+          ...values,
+          ...deepFlags,
+          ...(deepHouseboat ? { status: 'ignored' as const } : {}),
+        });
         newListings++;
       } else {
         // Bevar 'ignored' — bruger har aktivt markeret denne case som
         // fjernet. Scrape må kun sætte status tilbage til 'active' hvis
         // den fx var 'sold' og er kommet tilbage på markedet.
+        // Husbåde tvinges altid til 'ignored'.
         const preservedStatus =
-          existing[0].status === 'ignored' ? 'ignored' : values.status;
+          isHouseboat || existing[0].status === 'ignored' ? 'ignored' : values.status;
         // Bevar manuelt-sat hjemfaldspligt: hvis bruger allerede har
         // taget stilling (true ELLER false med ikke-auto note), så lader
         // vi det stå. Scrape må kun ADD'e hjemfald, ikke fjerne det.

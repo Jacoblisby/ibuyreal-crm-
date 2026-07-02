@@ -268,17 +268,19 @@ export function pickCurated(
         !isGroundFloor(c.address),
     )
     // Auto-gates: kan bypasses hvis topPickOverride=true (manuel pin).
+    // α må gerne være marginalt negativ (op til -5%) fordi AVM ofte er
+    // systematisk pessimistisk. Composite-score sorterer så cases med
+    // stærkt marked-signal alligevel kan komme øverst.
     .filter(
       (c) =>
         c.topPickOverride ||
         ((c.v3FmvSource === 'ibuyreal-avm' || c.v3FmvSource === 'manual') &&
-          (c.v3Alpha ?? 0) > 0 &&
+          (c.v3Alpha ?? 0) > -0.05 && // 5% tolerance på AVM-pessimisme
           (c.kvm ?? 999) <= 100 &&
           !isNoisyStreet(c.address) &&
           !isConcreteEra(c.yearBuilt) &&
           // Stand-gate: hvis vision har kørt, kræv stand ≥ 6 + 0 deal-breakers.
-          // Hvis vision endnu ikke har kørt (null), giv casen pass — gaten
-          // tager først effekt når vi har data.
+          // Hvis vision endnu ikke har kørt (null), giv casen pass.
           (!c.imageAssessment ||
             (c.imageAssessment.overall_condition >= 6 &&
               (c.imageAssessment.deal_breakers?.length ?? 0) === 0))),

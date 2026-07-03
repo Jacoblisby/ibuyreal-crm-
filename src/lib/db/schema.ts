@@ -310,6 +310,12 @@ export const onMarketCandidates = pgTable(
     reviewStatus: text('review_status').notNull().default('ny'), // ny | interesseret | passet | senere | importeret
     /** Hvorfor blev casen passet? Sat via triage-inbox. pris | stand | beliggenhed | andet */
     passReason: text('pass_reason'),
+    /**
+     * Fritekst-begrundelse fra triage: hvorfor virker/virker casen ikke?
+     * Feedback-loop — bruges til at lære hvor modellen/gates afviger fra
+     * Jacobs faktiske vurdering. Gemmes ved både Interesseret og Pas.
+     */
+    reviewNote: text('review_note'),
     /** Hvornår brugeren sidst tog stilling (triage-handling) */
     reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
 

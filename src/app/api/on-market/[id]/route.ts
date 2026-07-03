@@ -9,6 +9,7 @@ import type { Bydel } from '@/lib/types';
 const patchSchema = z.object({
   reviewStatus: z.enum(['ny', 'interesseret', 'passet', 'senere', 'importeret']).optional(),
   passReason: z.enum(['pris', 'stand', 'beliggenhed', 'andet']).nullable().optional(),
+  reviewNote: z.string().max(2000).nullable().optional(),
   status: z.enum(['active', 'sold', 'ignored']).optional(),
   manualFmv: z.number().positive().nullable().optional(),
   manualFmvNote: z.string().nullable().optional(),

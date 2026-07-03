@@ -36,6 +36,8 @@ export function TriageClient({
   const [showPassPicker, setShowPassPicker] = useState(false);
   const [busy, setBusy] = useState(false);
   const [doneCount, setDoneCount] = useState(0);
+  // Feedback-loop: fritekst-begrundelse gemmes sammen med beslutningen
+  const [note, setNote] = useState('');
 
   const queue = useMemo(() => {
     const picks = pickCurated(initial, 20, { strongFreshMap, calibration });
@@ -52,14 +54,20 @@ export function TriageClient({
       setShowPassPicker(false);
       const id = current.id;
       const addr = current.address;
+      const trimmedNote = note.trim();
       // Optimistisk: videre med det samme
       setHandled((prev) => new Set(prev).add(id));
       setDoneCount((n) => n + 1);
+      setNote('');
       try {
         const r = await fetch(`/api/on-market/${id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ reviewStatus, ...(passReason ? { passReason } : {}) }),
+          body: JSON.stringify({
+            reviewStatus,
+            ...(passReason ? { passReason } : {}),
+            ...(trimmedNote ? { reviewNote: trimmedNote } : {}),
+          }),
         });
         if (!r.ok) throw new Error('Kunne ikke gemme');
         const label =
@@ -77,11 +85,12 @@ export function TriageClient({
           return next;
         });
         setDoneCount((n) => n - 1);
+        setNote(trimmedNote); // gendan så begrundelsen ikke tabes
       } finally {
         setBusy(false);
       }
     },
-    [current, busy],
+    [current, busy, note],
   );
 
   // Tastaturgenveje
@@ -260,6 +269,22 @@ export function TriageClient({
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Feedback-loop: hvorfor virker/virker den ikke? */}
+        <div className="border-t border-slate-100 px-6 py-4">
+          <label className="mb-1.5 block text-xs font-medium text-slate-600">
+            Din vurdering — hvorfor virker casen / virker den ikke?{' '}
+            <span className="font-normal text-slate-400">(valgfrit — gemmes med beslutningen og bruges til at forbedre modellen)</span>
+          </label>
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            rows={2}
+            maxLength={2000}
+            placeholder='F.eks. "God pris men Sundholm-kvarteret er for uroligt" eller "AVM undervurderer — altan + 5. sal med udsigt"'
+            className="w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-300 transition-colors duration-150 ease-[var(--ease-out)] hover:border-slate-300 focus:border-slate-400 focus:outline-none"
+          />
         </div>
 
         {/* Handlings-bar */}

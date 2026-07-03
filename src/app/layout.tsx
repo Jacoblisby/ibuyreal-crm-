@@ -28,6 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 { href: '/investors', label: 'Investorer' },
                 { href: '/settings', label: 'Antagelser' },
                 { href: '/admin/external-sales', label: 'Resight' },
+                { href: '/admin/triage-feedback', label: 'Feedback' },
                 { href: '/admin/avm-faldgrupper', label: 'AVM faldgrupber' },
                 { href: '/admin/training-export', label: 'AVM export' },
               ].map((item) => (

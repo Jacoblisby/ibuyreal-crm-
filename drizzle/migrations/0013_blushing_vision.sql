@@ -1,0 +1,1 @@
+ALTER TABLE "on_market_candidates" ADD COLUMN "review_note" text;

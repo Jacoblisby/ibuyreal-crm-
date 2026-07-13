@@ -608,6 +608,50 @@ export default async function PitchPage({ params }: { params: Promise<{ id: stri
         </div>
       </div>
 
+      {/* ─── SOL & LYS (solnu shadow-engine) ─────────────────────────── */}
+      {c.sunScore !== null && c.sunData && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold tracking-tight text-slate-900">Sol & lys</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Ray casting mod 160.000 KBH-bygninger i lejlighedens etagehøjde ({c.sunData.floor === 0 ? 'stueplan' : `${c.sunData.floor}. sal`}).
+                Bedste facade — orientering ukendt.
+              </p>
+            </div>
+            <div
+              className={
+                'flex h-14 w-14 flex-none items-center justify-center rounded-full text-lg font-bold tabular-nums ' +
+                (c.sunScore >= 60
+                  ? 'bg-amber-100 text-amber-700'
+                  : c.sunScore >= 35
+                  ? 'bg-slate-100 text-slate-600'
+                  : 'bg-slate-200 text-slate-500')
+              }
+            >
+              {c.sunScore}
+            </div>
+          </div>
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <MiniStat
+              label="Soltimer 21. juni"
+              value={`${c.sunData.jun.sunHours}t${c.sunData.jun.firstSun !== null ? ` (kl. ${c.sunData.jun.firstSun}-${c.sunData.jun.lastSun})` : ''}`}
+              tone={c.sunData.jun.sunHours >= 10 ? 'emerald' : c.sunData.jun.sunHours >= 6 ? 'amber' : 'rose'}
+            />
+            <MiniStat
+              label="Aftensol efter kl. 16"
+              value={c.sunData.jun.afternoonSunHours > 0 ? `${c.sunData.jun.afternoonSunHours} timer` : 'Ingen'}
+              tone={c.sunData.jun.afternoonSunHours >= 3 ? 'emerald' : c.sunData.jun.afternoonSunHours > 0 ? 'amber' : 'rose'}
+            />
+            <MiniStat
+              label="Soltimer 21. marts"
+              value={`${c.sunData.mar.sunHours}t`}
+              tone={c.sunData.mar.sunHours >= 7 ? 'emerald' : c.sunData.mar.sunHours >= 4 ? 'amber' : 'rose'}
+            />
+          </div>
+        </div>
+      )}
+
       {/* ─── DEAL NOTE / NEXT STEPS ──────────────────────────────────── */}
       {isPitchable && fresh5mAboveList.length > 0 && (
         <div className="rounded-xl border border-emerald-200/70 bg-emerald-50/40 p-5">

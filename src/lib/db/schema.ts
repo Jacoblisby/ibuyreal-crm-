@@ -372,6 +372,20 @@ export const onMarketCandidates = pgTable(
     /** Hash af images-arrayet — bruges til at detektere om reassess er nødvendig */
     imageAssessmentHash: text('image_assessment_hash'),
 
+    /**
+     * Sol-score 0-100 fra solnu shadow-engine (34k OSM-bygninger + ray casting)
+     * beregnet i lejlighedens etagehøjde. 40% juni-soltimer, 30% aftensol
+     * 16-21, 30% marts-soltimer. Se src/lib/sun.ts.
+     */
+    sunScore: integer('sun_score'),
+    sunData: jsonb('sun_data').$type<{
+      floor: number;
+      heightM: number;
+      jun: { sunHours: number; afternoonSunHours: number; firstSun: number | null; lastSun: number | null };
+      mar: { sunHours: number; afternoonSunHours: number; firstSun: number | null; lastSun: number | null };
+    }>(),
+    sunCalculatedAt: timestamp('sun_calculated_at', { withTimezone: true }),
+
     // Hvis konverteret til Property
     convertedPropertyId: uuid('converted_property_id').references(() => properties.id, {
       onDelete: 'set null',

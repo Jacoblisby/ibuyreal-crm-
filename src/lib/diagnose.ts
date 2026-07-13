@@ -145,6 +145,39 @@ export function diagnoseCase(
     });
   }
 
+  // ─── LYS (solnu shadow-engine, beregnet i etagehøjde) ─────────────────
+  if (c.sunScore !== null && c.sunScore !== undefined) {
+    const jun = c.sunData?.jun;
+    const sunDetail = jun
+      ? `Juni: ${jun.sunHours} soltimer på bedste facade${jun.afternoonSunHours > 0 ? `, aftensol ${jun.afternoonSunHours}t efter kl. 16` : ', ingen aftensol'}${jun.firstSun !== null ? ` (kl. ${jun.firstSun}-${jun.lastSun})` : ''}. Marts: ${c.sunData?.mar.sunHours ?? '?'} timer. Score ${c.sunScore}/100 — ray casting mod 160k KBH-bygninger i etagehøjde. NB: bedste facade — orientering ukendt.`
+      : `Sol-score ${c.sunScore}/100.`;
+    if (c.sunScore >= 60) {
+      flags.push({
+        level: 'pass',
+        label: `Sol ${c.sunScore}`,
+        detail: sunDetail,
+        category: 'lokation',
+        weight: 42,
+      });
+    } else if (c.sunScore >= 35) {
+      flags.push({
+        level: 'warn',
+        label: `Sol ${c.sunScore}`,
+        detail: sunDetail,
+        category: 'lokation',
+        weight: 42,
+      });
+    } else {
+      flags.push({
+        level: 'fail',
+        label: `Mørk (${c.sunScore})`,
+        detail: `Meget lidt direkte sol. ${sunDetail}`,
+        category: 'lokation',
+        weight: 55,
+      });
+    }
+  }
+
   // ─── STØRRELSE ─────────────────────────────────────────────────────────
   if (c.kvm) {
     if (c.kvm > 110) {

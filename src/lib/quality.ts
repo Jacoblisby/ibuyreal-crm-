@@ -14,7 +14,7 @@ const NOISY_STREETS = [
   'Bispeengen',                 // Bispeengbuen — hævet motorvej
   'Åboulevard',                 // Bispeengbuens fortsættelse
   'H.C. Andersens Boulevard',   // 6 spor trafik
-  'Borups Allé',                // Nordvest-grænse
+  // 'Borups Allé' FJERNET — empirisk +5,3% (ingen støjrabat målt)
   'Vesterbrogade',
   'Nørrebrogade',
   'Amagerbrogade',              // -7.2% målt
@@ -31,7 +31,7 @@ const NOISY_STREETS = [
   'Englandsvej',                // Amager-hovedgade
   'Sundbyvestervej',            // Amager
   'Vigerslev Allé',             // Valby
-  'Sjælør Boulevard',           // Sydhavn
+  // 'Sjælør Boulevard' FJERNET — empirisk +3,8% (ingen støjrabat målt)
   'Gammel Kongevej',            // Frederiksberg/Vesterbro grænse
   'Smallegade',                 // Frederiksberg
   'Søndre Fasanvej',            // Frederiksberg vest
@@ -60,9 +60,20 @@ const NOISY_STREETS = [
   'Helgolandsgade',
 ];
 
+// NB1: é-normalisering er vigtig — Boligsiden skriver "Falkoner Alle" uden é,
+// mens vores liste bruger korrekt stavning "Falkoner Allé". Uden [ée] matcher
+// mønstret aldrig de faktiske adresser (bug fundet på Borups Alle-cases).
+// NB2: JS \b virker ikke efter ikke-ASCII tegn (é/ø/å tæller ikke som \w),
+// så vi bruger unicode-lookarounds i stedet for \b.
 const NOISY_PATTERN = new RegExp(
-  `\\b(${NOISY_STREETS.map((s) => s.replace(/ø/g, '[øo]').replace(/æ/g, '[æae]').replace(/å/g, '[åa]')).join('|')})\\b`,
-  'i',
+  `(?<![\\p{L}])(${NOISY_STREETS.map((s) =>
+    s
+      .replace(/ø/g, '[øo]')
+      .replace(/æ/g, '[æae]')
+      .replace(/å/g, '[åa]')
+      .replace(/é/g, '[ée]'),
+  ).join('|')})(?![\\p{L}])`,
+  'iu',
 );
 
 /**

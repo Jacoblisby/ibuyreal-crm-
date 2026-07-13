@@ -13,9 +13,10 @@
  *   - lokalitet (samme postnr +10, samme bydel +5)
  */
 import { NextResponse } from 'next/server';
-import { and, eq, gte, isNotNull, sql } from 'drizzle-orm';
+import { and, eq, gte, isNotNull, or, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { externalSales, onMarketCandidates } from '@/lib/db/schema';
+import { clusterRanges } from '@/lib/postnrClusters';
 
 interface RawSale {
   date: string;
@@ -64,6 +65,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const kvmMin = Math.floor(subjectKvm * 0.7);
   const kvmMax = Math.ceil(subjectKvm * 1.3);
 
+  // Pris-klynge i stedet for exact postnr: centrum har 1-7 handler pr. mikro-zip,
+  // så matching sker på empirisk validerede klynger (se postnrClusters.ts).
+  // For store postnumre (2000, 2100...) er klyngen = [postnr, postnr] — identisk adfærd.
+  const subjectClusterRanges = clusterRanges(subjectPostal);
+  const clusterCondition = (col: typeof externalSales.postalCode | typeof onMarketCandidates.postalCode) =>
+    or(...subjectClusterRanges.map(([from, to]) => sql`(${col})::int BETWEEN ${from} AND ${to}`));
+
   async function queryPeers(by: 'postnr' | 'bydel') {
     return db
       .select({
@@ -78,7 +86,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       .where(
         and(
           by === 'postnr'
-            ? eq(onMarketCandidates.postalCode, subjectPostal)
+            ? clusterCondition(onMarketCandidates.postalCode)
             : eq(onMarketCandidates.bydel, subjectBydel ?? ''),
           isNotNull(onMarketCandidates.historicalSales),
           sql`${onMarketCandidates.kvm} BETWEEN ${kvmMin} AND ${kvmMax}`,
@@ -227,7 +235,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       .from(externalSales)
       .where(
         and(
-          eq(externalSales.postalCode, subjectPostal),
+          clusterCondition(externalSales.postalCode),
           gte(externalSales.saleDate, cutoff4yStr),
           sql`${externalSales.kvm} BETWEEN ${kvmMin} AND ${kvmMax}`,
         ),

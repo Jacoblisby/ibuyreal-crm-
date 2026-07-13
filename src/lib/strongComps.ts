@@ -7,7 +7,8 @@
  *   - ≥1 → kandidaten kan curates (men score bestemmer rangering)
  *
  * Peer-definition (skal matche /api/on-market/[id]/comparables for konsistens):
- *   - samme postnr  (fallback til samme bydel hvis postnr giver <peerMin peers)
+ *   - samme pris-klynge (typisk = postnr; centrum-postnumre samles i klynger,
+ *     se postnrClusters.ts — fallback til samme bydel hvis <peerMin peers)
  *   - kvm indenfor ±30%
  *   - byggeår indenfor ±25 år (hard filter)
  *
@@ -18,6 +19,7 @@
  *   - perAreaPrice ≥ subjectListPpm × (1 + abovePct)   (default abovePct = 0)
  */
 import type { OnMarketCandidate } from './db/schema';
+import { priceClusterId } from './postnrClusters';
 
 interface RawSale {
   date: string;
@@ -188,22 +190,24 @@ export function computeStrongFreshCompMap(
   cutoff.setMonth(cutoff.getMonth() - monthsBack);
   const cutoffStr = cutoff.toISOString().slice(0, 10);
 
-  // Index eksterne handler per postnr for O(1)-lookup
-  const extByPostnr = new Map<string, ExternalSaleLite[]>();
+  // Index per pris-klynge (ikke exact postnr) — centrum-postnumre er for små
+  // til exact matching (1-7 handler pr. zip); klyngerne er empirisk samme marked.
+  const extByCluster = new Map<string, ExternalSaleLite[]>();
   for (const e of externalPool) {
     if (e.saleDate < cutoffStr) continue;
     if (!e.kvm || e.kvm <= 0 || !e.amount) continue;
-    const arr = extByPostnr.get(e.postalCode) ?? [];
+    const key = priceClusterId(e.postalCode);
+    const arr = extByCluster.get(key) ?? [];
     arr.push(e);
-    extByPostnr.set(e.postalCode, arr);
+    extByCluster.set(key, arr);
   }
 
-  // Pre-index internal candidates per postnr for ditto
-  const candByPostnr = new Map<string, OnMarketCandidate[]>();
+  const candByCluster = new Map<string, OnMarketCandidate[]>();
   for (const x of candidates) {
-    const arr = candByPostnr.get(x.postalCode) ?? [];
+    const key = priceClusterId(x.postalCode);
+    const arr = candByCluster.get(key) ?? [];
     arr.push(x);
-    candByPostnr.set(x.postalCode, arr);
+    candByCluster.set(key, arr);
   }
 
   const out: Record<string, StrongFreshAggregate> = {};
@@ -221,7 +225,7 @@ export function computeStrongFreshCompMap(
     const ppms: number[] = [];
 
     // 1) Internal historicalSales
-    const peersInPostnr = candByPostnr.get(c.postalCode) ?? [];
+    const peersInPostnr = candByCluster.get(priceClusterId(c.postalCode)) ?? [];
     for (const p of peersInPostnr) {
       if (p.id === c.id) continue;
       if (!p.kvm || p.kvm < kvmMin || p.kvm > kvmMax) continue;
@@ -239,7 +243,7 @@ export function computeStrongFreshCompMap(
     }
 
     // 2) Resight external_sales
-    const extInPostnr = extByPostnr.get(c.postalCode) ?? [];
+    const extInPostnr = extByCluster.get(priceClusterId(c.postalCode)) ?? [];
     for (const e of extInPostnr) {
       if (e.kvm! < kvmMin || e.kvm! > kvmMax) continue;
       if (c.yearBuilt && e.yearBuilt && Math.abs(e.yearBuilt - c.yearBuilt) > yearTol) continue;

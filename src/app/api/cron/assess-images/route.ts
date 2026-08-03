@@ -35,28 +35,51 @@ export async function POST(req: Request) {
   }
   if (!db) return NextResponse.json({ error: 'DB ikke konfigureret' }, { status: 500 });
 
-  // Hent kvalificerende cases — pre-filter aggressivt så vi sparer Claude-calls.
-  // Vi kører kun på cases der ER eller LIGE NÆR ER på Top picks.
+  // scope=top (default): kun Top picks-nære cases — det daglige cron-mønster.
+  // scope=all: hele det aktive marked (fuld-markeds stand-kortlægning) —
+  //   batches via ?limit= så hver invocation holder sig under maxDuration;
+  //   kald i loop til assessed+errors == 0 tilbage (unchanged skipper gratis).
+  const url = new URL(req.url);
+  const scope = url.searchParams.get('scope') === 'all' ? 'all' : 'top';
+  const limit = Math.max(1, Math.min(30, Number(url.searchParams.get('limit') ?? 16)));
+
   const candidates = await db
     .select()
     .from(onMarketCandidates)
     .where(
-      and(
-        eq(onMarketCandidates.status, 'active'),
-        sql`${onMarketCandidates.v3FmvSource} IN ('ibuyreal-avm', 'manual')`,
-        sql`${onMarketCandidates.v3Alpha} > -0.05`, // lidt margin
-        sql`${onMarketCandidates.kvm} <= 110`,
-        eq(onMarketCandidates.hjemfaldspligt, false),
-        isNotNull(onMarketCandidates.images),
-      ),
+      scope === 'all'
+        ? and(eq(onMarketCandidates.status, 'active'), isNotNull(onMarketCandidates.images))
+        : and(
+            eq(onMarketCandidates.status, 'active'),
+            sql`${onMarketCandidates.v3FmvSource} IN ('ibuyreal-avm', 'manual')`,
+            sql`${onMarketCandidates.v3Alpha} > -0.05`, // lidt margin
+            sql`${onMarketCandidates.kvm} <= 110`,
+            eq(onMarketCandidates.hjemfaldspligt, false),
+            isNotNull(onMarketCandidates.images),
+          ),
     );
 
-  const queue = candidates.filter(
-    (c) =>
-      !isGroundFloor(c.address) &&
-      !isNoisyStreet(c.address) &&
-      !isConcreteEra(c.yearBuilt),
-  );
+  const prefiltered =
+    scope === 'all'
+      ? candidates
+      : candidates.filter(
+          (c) =>
+            !isGroundFloor(c.address) &&
+            !isNoisyStreet(c.address) &&
+            !isConcreteEra(c.yearBuilt),
+        );
+
+  // Ved scope=all: tag kun dem der faktisk skal vurderes (mangler assessment
+  // eller billeder ændret) op til limit — resten venter på næste kald.
+  const needing =
+    scope === 'all'
+      ? prefiltered.filter((c) => {
+          const imgs = (c.images as string[] | null) ?? [];
+          return imgs.length > 0 && (!c.imageAssessment || c.imageAssessmentHash !== hashImages(imgs));
+        })
+      : prefiltered;
+  const queue = scope === 'all' ? needing.slice(0, limit) : needing;
+  const remaining = needing.length - queue.length;
 
   const results: Result[] = [];
   let assessed = 0;
@@ -64,12 +87,14 @@ export async function POST(req: Request) {
   let unchanged = 0;
   let errors = 0;
 
-  for (const c of queue) {
+  const CONCURRENCY = 4;
+
+  async function processOne(c: (typeof queue)[number]): Promise<void> {
     const images = (c.images as string[] | null) ?? [];
     if (images.length === 0) {
       results.push({ id: c.id, address: c.address, status: 'skipped', reason: 'no images' });
       skipped++;
-      continue;
+      return;
     }
 
     const newHash = hashImages(images);
@@ -81,7 +106,7 @@ export async function POST(req: Request) {
         condition: c.imageAssessment.overall_condition,
       });
       unchanged++;
-      continue;
+      return;
     }
 
     try {
@@ -93,9 +118,9 @@ export async function POST(req: Request) {
       if (!assessment) {
         errors++;
         results.push({ id: c.id, address: c.address, status: 'error', reason: 'null assessment' });
-        continue;
+        return;
       }
-      await db
+      await db!
         .update(onMarketCandidates)
         .set({
           imageAssessment: assessment,
@@ -122,9 +147,14 @@ export async function POST(req: Request) {
     }
   }
 
+  for (let i = 0; i < queue.length; i += CONCURRENCY) {
+    await Promise.all(queue.slice(i, i + CONCURRENCY).map(processOne));
+  }
+
   return NextResponse.json({
     ok: true,
     queueSize: queue.length,
+    remaining,
     assessed,
     skipped,
     unchanged,

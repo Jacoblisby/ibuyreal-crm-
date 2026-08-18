@@ -386,6 +386,13 @@ export const onMarketCandidates = pgTable(
     }>(),
     sunCalculatedAt: timestamp('sun_calculated_at', { withTimezone: true }),
 
+    /**
+     * Prishistorik-let: sidste kendte udbudspris før den nuværende, sat af
+     * scrapen når prisen ændrer sig. Bruges til prisnedsættelser i morgen-digesten.
+     */
+    previousListPrice: doublePrecision('previous_list_price'),
+    priceChangedAt: timestamp('price_changed_at', { withTimezone: true }),
+
     // Hvis konverteret til Property
     convertedPropertyId: uuid('converted_property_id').references(() => properties.id, {
       onDelete: 'set null',
@@ -478,3 +485,24 @@ export type OnMarketCandidate = typeof onMarketCandidates.$inferSelect;
 export type ScrapeJob = typeof scrapeJobs.$inferSelect;
 export type ExternalSale = typeof externalSales.$inferSelect;
 export type NewExternalSale = typeof externalSales.$inferInsert;
+
+/**
+ * Log over afsendte morgen-digests. Gemmer hvilke cases der allerede er
+ * rapporteret, så næste mail kun viser det der er NYT siden sidst.
+ */
+export const digestRuns = pgTable(
+  'digest_runs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    sentAt: timestamp('sent_at', { withTimezone: true }).notNull().defaultNow(),
+    recipient: text('recipient'),
+    ok: boolean('ok').notNull().default(true),
+    error: text('error'),
+    topPickIds: jsonb('top_pick_ids').$type<string[]>().notNull().default([]),
+    handymanIds: jsonb('handyman_ids').$type<string[]>().notNull().default([]),
+    priceCutIds: jsonb('price_cut_ids').$type<string[]>().notNull().default([]),
+  },
+  (t) => [index('digest_runs_sent_idx').on(t.sentAt)],
+);
+
+export type DigestRun = typeof digestRuns.$inferSelect;

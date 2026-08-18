@@ -17,8 +17,10 @@
     "db:import-external-sales": "tsx --env-file=.env.local src/lib/db/scripts/importExternalSales.ts"
   },
   "dependencies": {
+    "@types/nodemailer": "^8.0.1",
     "drizzle-orm": "^0.45.2",
     "next": "16.2.4",
+    "nodemailer": "^9.0.5",
     "postgres": "^3.4.9",
     "react": "19.2.4",
     "react-dom": "19.2.4",

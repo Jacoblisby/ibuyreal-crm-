@@ -296,6 +296,7 @@ export async function runScrapeJob(opts: ScrapeRunOptions = {}): Promise<ScrapeR
           handymanListingNote: onMarketCandidates.handymanListingNote,
           avmPricePerSqm: onMarketCandidates.avmPricePerSqm,
           avmUnitUuid: onMarketCandidates.avmUnitUuid,
+          listPrice: onMarketCandidates.listPrice,
         })
         .from(onMarketCandidates)
         .where(
@@ -412,10 +413,20 @@ export async function runScrapeJob(opts: ScrapeRunOptions = {}): Promise<ScrapeR
               handymanListingNote: existing[0].handymanListingNote,
             }
           : {};
+        // Prisændring: gem den gamle pris så morgen-digesten kan vise
+        // prisnedsættelser. Kun ved faktisk ændring — ellers bevares historikken.
+        const oldPrice = existing[0].listPrice;
+        const priceMoved =
+          oldPrice != null && values.listPrice != null && Math.abs(oldPrice - values.listPrice) > 1;
+        const priceFields = priceMoved
+          ? { previousListPrice: oldPrice, priceChangedAt: new Date() }
+          : {};
+
         await db
           .update(onMarketCandidates)
           .set({
             ...values,
+            ...priceFields,
             ...preserveHjemfald,
             ...preserveHandyman,
             status: preservedStatus,

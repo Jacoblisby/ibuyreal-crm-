@@ -8,8 +8,8 @@
  *
  * "Nyt siden sidst" afgøres mod digest_runs-tabellen: hver afsendt mail
  * gemmer de rapporterede id'er, så samme case ikke dukker op to gange.
- * Første kørsel uden historik falder tilbage til "set inden for 7 dage"
- * og caps, så den første mail ikke bliver på 900 rækker.
+ * Første kørsel har ingen historik at diffe mod og sender derfor et
+ * ØJEBLIKSBILLEDE af de bedste cases lige nu (cappet) — ikke en tom mail.
  */
 import { and, desc, eq, gte, isNotNull, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
@@ -97,7 +97,8 @@ export async function buildDigest(): Promise<DigestData> {
   const seenTop = new Set(lastRun?.topPickIds ?? []);
   const seenHandyman = new Set(lastRun?.handymanIds ?? []);
 
-  // Fallback-vindue ved første kørsel: kun det der er set inden for 7 dage
+  // Prisnedsættelser har ingen id-historik at diffe mod ved første kørsel,
+  // så der bruges et 7-dages vindue i stedet.
   const fallbackCutoff = new Date(now);
   fallbackCutoff.setDate(fallbackCutoff.getDate() - 7);
 
@@ -125,11 +126,10 @@ export async function buildDigest(): Promise<DigestData> {
   const curated = pickCurated(rows, 20, { strongFreshMap, calibration });
 
   const allTopPickIds = curated.map((c) => c.id);
+  // Første kørsel: vis de bedste lige nu. Derefter: kun det der ikke
+  // allerede har været i en mail.
   const newTopPicks = curated
-    .filter((c) => {
-      if (!isFirstRun) return !seenTop.has(c.id);
-      return (c.firstSeenAt ?? new Date(0)) >= fallbackCutoff;
-    })
+    .filter((c) => isFirstRun || !seenTop.has(c.id))
     .slice(0, SECTION_CAP)
     .map((c) => toRow(c, strongFreshMap[c.id]?.count ?? 0));
 
@@ -141,10 +141,7 @@ export async function buildDigest(): Promise<DigestData> {
 
   const allHandymanIds = handymanRows.map((c) => c.id);
   const newHandyman = handymanRows
-    .filter((c) => {
-      if (!isFirstRun) return !seenHandyman.has(c.id);
-      return (c.firstSeenAt ?? new Date(0)) >= fallbackCutoff;
-    })
+    .filter((c) => isFirstRun || !seenHandyman.has(c.id))
     .sort((a, b) => (b.v3Alpha ?? -99) - (a.v3Alpha ?? -99))
     .slice(0, SECTION_CAP)
     .map((c) => toRow(c, strongFreshMap[c.id]?.count ?? 0));
@@ -270,7 +267,7 @@ export function renderDigestHtml(d: DigestData): string {
   const total = d.newTopPicks.length + d.newHandyman.length + d.priceCuts.length;
   const siden = d.previousRunAt
     ? `siden ${d.previousRunAt.toLocaleDateString('da-DK', { day: 'numeric', month: 'short' })}`
-    : 'seneste 7 dage (første mail)';
+    : '— første mail, øjebliksbillede af de bedste lige nu';
 
   return `<!doctype html><html lang="da"><body style="margin:0;padding:0;background:#f8fafc">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;padding:24px 12px">
@@ -283,8 +280,18 @@ export function renderDigestHtml(d: DigestData): string {
     ${total === 0 ? 'Ingen nye cases' : `${total} nye ting`} ${siden} · ${d.totals.active} aktive på markedet · ${d.totals.untriaged} venter i triagen
   </p>
 
-  ${sectionHtml('Nye Top picks', 'Kommet ind i top 20 siden sidste mail', d.newTopPicks, 'top')}
-  ${sectionHtml('Nye håndværkertilbud', 'Renoveringssager — value-add-kandidater', d.newHandyman, 'handyman')}
+  ${sectionHtml(
+    d.isFirstRun ? 'Top picks lige nu' : 'Nye Top picks',
+    d.isFirstRun ? 'De bedst scorende cases på markedet' : 'Kommet ind i top 20 siden sidste mail',
+    d.newTopPicks,
+    'top',
+  )}
+  ${sectionHtml(
+    d.isFirstRun ? 'Håndværkertilbud lige nu' : 'Nye håndværkertilbud',
+    'Renoveringssager — value-add-kandidater',
+    d.newHandyman,
+    'handyman',
+  )}
   ${sectionHtml('Prisnedsættelser', 'Aktive cases hvor udbudsprisen er faldet', d.priceCuts, 'cut')}
 
   <div style="margin-top:32px;padding-top:16px;border-top:1px solid #e2e8f0">

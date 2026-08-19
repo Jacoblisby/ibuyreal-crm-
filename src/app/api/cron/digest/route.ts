@@ -3,7 +3,12 @@
  *
  * Auth: Bearer CRON_SECRET (samme mønster som /api/cron/scrape).
  * Query:
- *   ?dry=1   byg og returnér HTML uden at sende (test)
+ *   ?dry=1     byg og returnér HTML uden at sende (test / ekstern afsendelse)
+ *   ?record=1  marker dagens cases som rapporteret UDEN at sende. Bruges når
+ *              mailen sendes ad anden vej (fx af en planlagt Claude-opgave):
+ *              hent HTML med dry=1, send den, og kald derefter record=1 så
+ *              næste mail kun viser det der er nyt. Rækkefølgen er vigtig —
+ *              record først ville sluge dagens nyheder hvis afsendelsen fejler.
  *
  * Env der skal sættes i Coolify:
  *   SMTP_USER   afsender-adresse (fx jacob@faurholt.com)
@@ -30,11 +35,24 @@ export async function POST(req: Request) {
   if (provided !== secret) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   if (!db) return NextResponse.json({ error: 'DB ikke konfigureret' }, { status: 500 });
 
-  const dry = new URL(req.url).searchParams.get('dry') === '1';
+  const params = new URL(req.url).searchParams;
+  const dry = params.get('dry') === '1';
+  const recordOnly = params.get('record') === '1';
 
   const data = await buildDigest();
   const html = renderDigestHtml(data);
   const subject = renderDigestSubject(data);
+
+  if (recordOnly) {
+    await db.insert(digestRuns).values({
+      recipient: process.env.DIGEST_TO ?? 'ekstern-afsendelse',
+      ok: true,
+      topPickIds: data.seen.topPickIds,
+      handymanIds: data.seen.handymanIds,
+      priceCutIds: data.seen.priceCutIds,
+    });
+    return NextResponse.json({ ok: true, recorded: true, subject });
+  }
 
   if (dry) {
     return new NextResponse(html, { headers: { 'content-type': 'text/html; charset=utf-8' } });

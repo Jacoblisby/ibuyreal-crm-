@@ -413,6 +413,9 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
         </a>
       </div>
 
+      {/* Beslutnings-anker: de tre tal købet faktisk hviler på */}
+      <DecisionBar c={c} />
+
       {/* JP Morgan-grade hero: curated score + rationale + red flags */}
       <CuratedHero score={score} />
 
@@ -1401,6 +1404,74 @@ function Kpi({
         {value}
       </div>
       {sub && <div className="mt-1 text-xs text-slate-400">{sub}</div>}
+    </div>
+  );
+}
+
+/**
+ * Beslutnings-bånd øverst på siden.
+ *
+ * Siden åbnede tidligere på en score (62/100), mens de tal en købsbeslutning
+ * faktisk hviler på — udbud, vores estimat og forskellen — lå spredt seks
+ * steder længere nede. De står stadig i beregningerne; her er de ankeret.
+ */
+function DecisionBar({ c }: { c: OnMarketCandidate }) {
+  const udbud = c.listPrice ?? 0;
+  const fmv = c.manualFmv ?? c.v3Fmv ?? 0;
+  const kvm = c.kvm ?? 0;
+  if (!udbud || !fmv) return null;
+
+  const gap = fmv - udbud;
+  const gapPct = gap / udbud;
+  const under = gap >= 0;
+  const ppm = (n: number) => `${Math.round(n / kvm).toLocaleString('da-DK')} kr/m²`;
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white px-6 py-5 shadow-sm">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-[1fr_1fr_1.25fr] sm:gap-8">
+        <div>
+          <div className="text-[11px] font-medium uppercase tracking-wider text-slate-400">Udbudspris</div>
+          <div className="mt-1.5 text-[26px] font-semibold leading-none tabular-nums text-slate-900">
+            {formatKr(udbud)}
+          </div>
+          {kvm > 0 && <div className="mt-2 text-xs tabular-nums text-slate-400">{ppm(udbud)}</div>}
+        </div>
+        <div>
+          <div className="text-[11px] font-medium uppercase tracking-wider text-slate-400">Vores estimat</div>
+          <div className="mt-1.5 text-[26px] font-semibold leading-none tabular-nums text-slate-900">
+            {formatKr(fmv)}
+          </div>
+          {kvm > 0 && (
+            <div className="mt-2 text-xs tabular-nums text-slate-400">
+              {ppm(fmv)}
+              {c.manualFmv ? ' · manuelt sat' : ''}
+            </div>
+          )}
+        </div>
+        <div
+          className={
+            'border-t pt-4 sm:border-l sm:border-t-0 sm:pl-8 sm:pt-0 ' +
+            (under ? 'border-emerald-200' : 'border-rose-200')
+          }
+        >
+          <div className="text-[11px] font-medium uppercase tracking-wider text-slate-400">
+            {under ? 'Udbudt under vores estimat' : 'Udbudt over vores estimat'}
+          </div>
+          <div
+            className={
+              'mt-1.5 text-[38px] font-semibold leading-none tracking-tight tabular-nums ' +
+              (under ? 'text-emerald-600' : 'text-rose-600')
+            }
+          >
+            {under ? '+' : ''}
+            {(gapPct * 100).toFixed(1)} %
+          </div>
+          <div className="mt-2 text-xs tabular-nums text-slate-500">
+            {under ? '+' : ''}
+            {formatKr(gap)} i potentiale
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

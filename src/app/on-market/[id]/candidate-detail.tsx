@@ -950,8 +950,31 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
             />
           </div>
 
-          {/* Mellemregninger — 2 kolonner */}
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {/* Mellemregninger — revisionsspor, foldet sammen som standard.
+              Seks kort med samme vægt som beslutningsinfoen gjorde siden
+              ulæselig; tallene er her stadig, bare et klik væk. */}
+          <details className="group rounded-xl border border-slate-200 bg-white shadow-sm">
+            <summary className="flex cursor-pointer list-none items-center justify-between px-5 py-3.5 text-[13px] font-semibold tracking-tight text-slate-900 transition-colors duration-150 ease-[var(--ease-out)] hover:bg-slate-50">
+              <span>
+                Mellemregninger
+                <span className="ml-2 font-normal text-slate-400">
+                  ADR · Airbnb-cashflow · langtidsleje · købspris · transaktion · alpha
+                </span>
+              </span>
+              <svg
+                className="h-4 w-4 flex-none text-slate-400 transition-transform duration-150 ease-[var(--ease-out)] group-open:rotate-180"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </summary>
+            <div className="grid grid-cols-1 gap-4 border-t border-slate-100 p-4 lg:grid-cols-2">
             {/* Venstre kolonne: ADR + Airbnb */}
             <div className="space-y-4">
               <Panel title="① ADR-beregning (natpris)">
@@ -1114,7 +1137,8 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
                 </div>
               </Panel>
             </div>
-          </div>
+            </div>
+          </details>
 
           {/* Tidligere handler — full width */}
           <HistoryPanel candidate={c} liveFmv={live.fmv} kvm={kvm} listPrice={c.listPrice ?? 0} />

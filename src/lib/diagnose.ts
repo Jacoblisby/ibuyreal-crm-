@@ -12,6 +12,7 @@
 import type { OnMarketCandidate } from './db/schema';
 import type { StrongFreshAggregate } from './strongComps';
 import { isConcreteEra, isGroundFloor, isNoisyStreet } from './quality';
+import { TIER_LABEL, WARNING_LABEL } from './compEngine';
 
 export type DiagnoseLevel = 'pass' | 'warn' | 'fail';
 
@@ -143,6 +144,61 @@ export function diagnoseCase(
       category: 'lokation',
       weight: 80,
     });
+  }
+
+  // ─── COMP-ENGINE (egen /api/inspect: kvantiler + confidence) ──────────
+  if (c.compEngine && c.kvm && c.listPrice) {
+    const ce = c.compEngine;
+    const listPpm = c.listPrice / c.kvm;
+    const vsList = (ce.medianPpm - listPpm) / listPpm;
+    const vsP10 = (ce.p10Ppm - listPpm) / listPpm;
+    const tier = TIER_LABEL[ce.fallbackTier] ?? ce.fallbackTier;
+    const detail =
+      `Comp-engine: median ${Math.round(ce.medianPpm).toLocaleString('da-DK')} kr/m² ` +
+      `(${vsList >= 0 ? '+' : ''}${(vsList * 100).toFixed(1)}% vs udbud) · ` +
+      `P10 ${Math.round(ce.p10Ppm).toLocaleString('da-DK')} kr/m² ` +
+      `(${vsP10 >= 0 ? '+' : ''}${(vsP10 * 100).toFixed(1)}%) · ` +
+      `${ce.compCount} comps ${tier}, median ${Math.round(ce.medianDistanceM)} m væk, ` +
+      `${Math.round(ce.medianDaysSinceSale)} dage gamle.` +
+      (ce.warnings.length
+        ? ` Advarsler: ${ce.warnings.map((w) => WARNING_LABEL[w] ?? w).join(', ')}.`
+        : '');
+
+    if (ce.requiresManualReview || ce.confidenceLabel === 'low') {
+      // Tallet kan være rigtigt, men det hviler på for tyndt et grundlag
+      // til at gate på. Flag det frem for at lade det tælle som evidens.
+      flags.push({
+        level: 'warn',
+        label: `Comps usikre (${ce.compCount})`,
+        detail: `Engine markerer casen til manuel vurdering. ${detail}`,
+        category: 'data',
+        weight: 70,
+      });
+    } else if (vsP10 >= 0) {
+      flags.push({
+        level: 'pass',
+        label: `Comps +${(vsList * 100).toFixed(0)}%`,
+        detail: `Udbudt under selv P10 — holder også hvis comps'ene rammer i den lave ende. ${detail}`,
+        category: 'marked',
+        weight: 72,
+      });
+    } else if (vsList >= 0) {
+      flags.push({
+        level: 'pass',
+        label: `Comps +${(vsList * 100).toFixed(0)}%`,
+        detail,
+        category: 'marked',
+        weight: 68,
+      });
+    } else {
+      flags.push({
+        level: 'fail',
+        label: `Comps ${(vsList * 100).toFixed(0)}%`,
+        detail: `Comp-engine vurderer boligen lavere end udbudsprisen. ${detail}`,
+        category: 'marked',
+        weight: 75,
+      });
+    }
   }
 
   // ─── LYS (solnu shadow-engine, beregnet i etagehøjde) ─────────────────

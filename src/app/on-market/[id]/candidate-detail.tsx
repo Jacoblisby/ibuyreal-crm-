@@ -16,6 +16,7 @@ import { DEFAULT_ANTAGELSER } from '@/lib/constants';
 import type { OnMarketCandidate } from '@/lib/db/schema';
 import { formatKr, formatNum, formatPct } from '@/lib/format';
 import { BYDEL_LABEL } from '@/lib/status';
+import { TIER_LABEL, WARNING_LABEL } from '@/lib/compEngine';
 import type { Antagelser, Bydel, Scenarie } from '@/lib/types';
 
 type Review = 'ny' | 'interesseret' | 'passet' | 'importeret';
@@ -1474,6 +1475,7 @@ function DecisionBar({ c }: { c: OnMarketCandidate }) {
   const kvm = c.kvm ?? 0;
   if (!udbud || !fmv) return null;
 
+  const ce = c.compEngine;
   const gap = fmv - udbud;
   const gapPct = gap / udbud;
   const under = gap >= 0;
@@ -1534,6 +1536,40 @@ function DecisionBar({ c }: { c: OnMarketCandidate }) {
           )}
         </div>
       </div>
+
+      {/* Comp-engine: spændet omkring vurderingen. AVM'en giver ét tal;
+          det her viser hvor bredt grundlaget egentlig er, og hvor meget
+          det holder hvis comps'ene rammer i den lave ende. */}
+      {ce && kvm > 0 && (
+        <div className="mt-4 border-t border-slate-100 pt-4">
+          <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2 text-xs">
+            <span className="font-medium uppercase tracking-wider text-slate-400">
+              Comp-engine
+            </span>
+            <span className="tabular-nums text-slate-600">
+              P10 <strong className="font-semibold text-slate-900">{Math.round(ce.p10Ppm).toLocaleString('da-DK')}</strong>
+              {' · '}median <strong className="font-semibold text-slate-900">{Math.round(ce.medianPpm).toLocaleString('da-DK')}</strong>
+              {' · '}P90 <strong className="font-semibold text-slate-900">{Math.round(ce.p90Ppm).toLocaleString('da-DK')}</strong> kr/m²
+            </span>
+            <span
+              className={
+                'rounded-full px-2 py-0.5 text-[11px] font-medium ' +
+                (ce.requiresManualReview || ce.confidenceLabel === 'low'
+                  ? 'bg-amber-50 text-amber-800'
+                  : 'bg-emerald-50 text-emerald-800')
+              }
+            >
+              {ce.compCount} comps · {TIER_LABEL[ce.fallbackTier] ?? ce.fallbackTier}
+              {ce.requiresManualReview ? ' · kræver manuel vurdering' : ''}
+            </span>
+            {ce.warnings.length > 0 && (
+              <span className="text-slate-400">
+                {ce.warnings.map((w) => WARNING_LABEL[w] ?? w).join(' · ')}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

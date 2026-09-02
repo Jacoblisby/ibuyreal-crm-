@@ -387,6 +387,32 @@ export const onMarketCandidates = pgTable(
     sunCalculatedAt: timestamp('sun_calculated_at', { withTimezone: true }),
 
     /**
+     * iBuyReals egen comp-engine (/api/inspect). Giver noget AVM'en ikke gør:
+     * et kvantil-spænd (P10-P90) og en confidence-vurdering af hvor godt
+     * comps'ene egentlig matcher. P10 er det konservative købssignal.
+     */
+    compEngine: jsonb('comp_engine').$type<{
+      medianPpm: number;
+      meanPpm: number;
+      p10Ppm: number;
+      p25Ppm: number;
+      p75Ppm: number;
+      p90Ppm: number;
+      confidence: number;
+      confidenceLabel: string;
+      compCount: number;
+      medianDistanceM: number;
+      medianDaysSinceSale: number;
+      fallbackTier: string;
+      requiresManualReview: boolean;
+      warnings: string[];
+    }>(),
+    compEngineMedianPpm: doublePrecision('comp_engine_median_ppm'),
+    compEngineP10Ppm: doublePrecision('comp_engine_p10_ppm'),
+    compEngineConfidence: doublePrecision('comp_engine_confidence'),
+    compEngineAt: timestamp('comp_engine_at', { withTimezone: true }),
+
+    /**
      * Prishistorik-let: sidste kendte udbudspris før den nuværende, sat af
      * scrapen når prisen ændrer sig. Bruges til prisnedsættelser i morgen-digesten.
      */

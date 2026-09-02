@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { db } from '@/lib/db/client';
 import { onMarketCandidates } from '@/lib/db/schema';
 import { CandidateDetail } from './candidate-detail';
+import { loadAntagelser } from '@/lib/antagelser.server';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,6 +13,7 @@ export default async function OnMarketCasePage({ params }: { params: Promise<{ i
   const { id } = await params;
   const [cand] = await db.select().from(onMarketCandidates).where(eq(onMarketCandidates.id, id));
   if (!cand) notFound();
+  const antag = await loadAntagelser();
 
   return (
     <div className="space-y-6">
@@ -25,7 +27,7 @@ export default async function OnMarketCasePage({ params }: { params: Promise<{ i
           {cand.realtorName && <> · {cand.realtorName}</>}
         </p>
       </div>
-      <CandidateDetail candidate={cand} />
+      <CandidateDetail candidate={cand} antagelser={antag} />
     </div>
   );
 }

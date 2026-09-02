@@ -21,7 +21,9 @@ import {
   type ScrapedListing,
 } from './services/boligsiden';
 import { estimateFmv, fetchAvmBatch, type AvmPrediction } from './avm';
-import type { Bydel } from './types';
+import type { Antagelser, Bydel } from './types';
+import { DEFAULT_ANTAGELSER } from './constants';
+import { loadAntagelser } from './antagelser.server';
 
 /**
  * Auto-detekt hjemfaldspligt fra Boligsiden-beskrivelse + titel.
@@ -170,11 +172,20 @@ function estimateBsAlpha(listing: ScrapedListing): number | null {
  *
  * FMV-prioritet: manualFmv > AVM-prediction > listPris fallback.
  */
-function runV3OnListing(
-  listing: ScrapedListing,
+export interface V3Subject {
+  listPrice: number;
+  kvm: number;
+  rooms: number | null;
+  yearBuilt: number | null;
+  monthlyExpense: number | null;
+}
+
+export function runV3OnListing(
+  listing: V3Subject,
   bydel: Bydel | null,
   avmPrediction: AvmPrediction | undefined,
   manualFmv: number | null = null,
+  a: Antagelser = DEFAULT_ANTAGELSER,
 ) {
   if (!bydel) return null; // V3 kræver bydel for langtidsleje-rate
 
@@ -199,7 +210,7 @@ function runV3OnListing(
     fmv: fmvEstimate.fmv,
     ejTotal,
     tilbudPris: listing.listPrice, // on-market: ingen rabat
-  });
+  }, a);
 
   return {
     avmUnitUuid: avmPrediction?.unitUuid ?? null,
@@ -220,6 +231,10 @@ function runV3OnListing(
 
 export async function runScrapeJob(opts: ScrapeRunOptions = {}): Promise<ScrapeRunResult> {
   if (!db) throw new Error('DB ikke konfigureret');
+
+  // Hent de gemte antagelser én gang — tidligere regnede scrapen altid med
+  // DEFAULT_ANTAGELSER, så alt gemt på Antagelser-siden var uden effekt.
+  const antag = await loadAntagelser();
 
   const postnumre = opts.postnumre ?? DEFAULT_SCRAPE_POSTNUMRE;
   const minRooms = opts.minRooms ?? 2;
@@ -322,7 +337,7 @@ export async function runScrapeJob(opts: ScrapeRunOptions = {}): Promise<ScrapeR
             }
           : undefined);
 
-      const v3 = runV3OnListing(l, bydel, effectivePrediction, manualFmv);
+      const v3 = runV3OnListing(l, bydel, effectivePrediction, manualFmv, antag);
 
       // Historik fra Boligsiden /addresses/{uuid}
       const history = l.addressId ? historyMap.get(l.addressId) : undefined;

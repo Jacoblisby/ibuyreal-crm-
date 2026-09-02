@@ -16,7 +16,7 @@ import { DEFAULT_ANTAGELSER } from '@/lib/constants';
 import type { OnMarketCandidate } from '@/lib/db/schema';
 import { formatKr, formatNum, formatPct } from '@/lib/format';
 import { BYDEL_LABEL } from '@/lib/status';
-import type { Bydel, Scenarie } from '@/lib/types';
+import type { Antagelser, Bydel, Scenarie } from '@/lib/types';
 
 type Review = 'ny' | 'interesseret' | 'passet' | 'importeret';
 
@@ -79,7 +79,15 @@ function buildInitialInputs(c: OnMarketCandidate): InputState {
   };
 }
 
-export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCandidate }) {
+export function CandidateDetail({
+  candidate: initial,
+  antagelser,
+}: {
+  candidate: OnMarketCandidate;
+  /** De gemte antagelser. Uden dem startede live-genberegningen fra
+      DEFAULT_ANTAGELSER og var dermed uenig med listens tal. */
+  antagelser?: Antagelser;
+}) {
   const router = useRouter();
   const [c, setC] = useState(initial);
   const [activeImg, setActiveImg] = useState(0);
@@ -116,8 +124,8 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
       (Number(form.ejFaelles) || 0) +
       (Number(form.ejOvrige) || 0);
 
-    // Bygd custom Antagelser
-    const baseA = DEFAULT_ANTAGELSER;
+    // Bygd custom Antagelser oven på de gemte (ikke defaults)
+    const baseA = antagelser ?? DEFAULT_ANTAGELSER;
     const roomFactor = getRoomFactor(vaer, baseA);
     const standFactor = getStandFactor(bygaar, baseA);
 
@@ -185,7 +193,7 @@ export function CandidateDetail({ candidate: initial }: { candidate: OnMarketCan
       expatYearly,
       antagelser: a,
     };
-  }, [form, bydel, kvm, vaer, bygaar, udbud]);
+  }, [form, bydel, kvm, vaer, bygaar, udbud, antagelser]);
 
   function update<K extends keyof InputState>(key: K, value: InputState[K]) {
     setForm((p) => ({ ...p, [key]: value }));

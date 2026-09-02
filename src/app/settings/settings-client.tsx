@@ -4,58 +4,8 @@ import { useMemo, useState } from 'react';
 import { calculateProperty } from '@/lib/calculator';
 import type { AntagelserRow, Property } from '@/lib/db/schema';
 import { formatKr, formatPct } from '@/lib/format';
-import type { Antagelser, Bydel } from '@/lib/types';
-
-function rowToAntagelser(r: AntagelserRow): Antagelser {
-  return {
-    adr: {
-      'indre-by': r.adrIndreby,
-      vesterbro: r.adrVesterbro,
-      noerrebro: r.adrNoerrebro,
-      'oesterbro': r.adrOsterbro,
-      frederiksberg: r.adrFrederiksberg,
-      amager: r.adrAmager,
-    },
-    occ: {
-      'indre-by': r.occIndreby,
-      vesterbro: r.occVesterbro,
-      noerrebro: r.occNoerrebro,
-      'oesterbro': r.occOsterbro,
-      frederiksberg: r.occFrederiksberg,
-      amager: r.occAmager,
-    },
-    langtidsleje: {
-      'indre-by': r.ltIndreby,
-      'oesterbro': r.ltOsterbro,
-      noerrebro: r.ltNoerrebro,
-      vesterbro: r.ltVesterbro,
-      frederiksberg: r.ltFrederiksberg,
-      amager: r.ltAmager,
-    },
-    room: {
-      studio: r.roomStudio,
-      v1: r.room1v,
-      v2: r.room2v,
-      v3: r.room3v,
-      v4: r.room4v,
-    },
-    stand: {
-      luksus: r.standLuksus,
-      god: r.standGod,
-      aeldre: r.standAeldre,
-    },
-    platformPct: r.platformPct,
-    rengoringKr: r.rengoringKr,
-    naetterPerBooking: r.naetterPerBooking,
-    adminPct: r.adminPct,
-    afslagPct: r.afslagPct,
-    convFeePct: r.convFeePct,
-    maeglerSparKr: r.maeglerSparKr,
-    txFastKr: r.txFastKr,
-    txPct: r.txPct,
-    beta: { worst: r.betaWorst, base: r.betaBase, best: r.betaBest },
-  };
-}
+import type { Bydel } from '@/lib/types';
+import { rowToAntagelser } from '@/lib/antagelser';
 
 const FIELDS: { key: keyof AntagelserRow; label: string; group: string; suffix?: string }[] = [
   // ADR
@@ -116,6 +66,7 @@ export function SettingsClient({
 }) {
   const [draft, setDraft] = useState<AntagelserRow>(antagelser);
   const [original] = useState<AntagelserRow>(antagelser);
+  const [recalcStatus, setRecalcStatus] = useState<string | null>(null);
   const [previewId, setPreviewId] = useState<string>(cases[0]?.id ?? '');
   const [saving, setSaving] = useState(false);
 
@@ -174,9 +125,21 @@ export function SettingsClient({
         body: JSON.stringify(rest),
       });
       if (!res.ok) throw new Error('Save fejlede');
-      alert('Antagelser gemt');
+
+      // Antagelserne ligger cachet i on-market-casenes v3-kolonner, så en
+      // gemning uden genberegning ville ikke flytte et eneste tal på skærmen.
+      setRecalcStatus('Genberegner cases…');
+      const rc = await fetch('/api/on-market/recalc', { method: 'POST' });
+      if (!rc.ok) {
+        setRecalcStatus('Gemt, men genberegning fejlede — kør den igen fra on-market.');
+        return;
+      }
+      const { updated, skipped } = (await rc.json()) as { updated: number; skipped: number };
+      setRecalcStatus(
+        `Gemt. ${updated} cases genberegnet${skipped ? ` · ${skipped} sprunget over (mangler kvm, pris eller bydel)` : ''}.`,
+      );
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Fejl');
+      setRecalcStatus(e instanceof Error ? e.message : 'Fejl');
     } finally {
       setSaving(false);
     }
@@ -235,7 +198,7 @@ export function SettingsClient({
             onClick={save}
             className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {saving ? 'Gemmer...' : dirty ? 'Gem ændringer' : 'Ingen ændringer'}
+            {saving ? 'Gemmer og genberegner…' : dirty ? 'Gem og genberegn' : 'Ingen ændringer'}
           </button>
           {dirty && (
             <button
@@ -244,6 +207,11 @@ export function SettingsClient({
             >
               Nulstil
             </button>
+          )}
+          {recalcStatus && (
+            <span className="text-sm text-slate-500" role="status">
+              {recalcStatus}
+            </span>
           )}
         </div>
       </div>

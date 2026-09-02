@@ -1500,7 +1500,7 @@ function DecisionBar({ c }: { c: OnMarketCandidate }) {
           }
         >
           <div className="text-[11px] font-medium uppercase tracking-wider text-slate-400">
-            {under ? 'Udbudt under vores estimat' : 'Udbudt over vores estimat'}
+            {under ? 'Udbudt under estimat' : 'Udbudt over estimat'}
           </div>
           <div
             className={
@@ -1515,6 +1515,15 @@ function DecisionBar({ c }: { c: OnMarketCandidate }) {
             {under ? '+' : ''}
             {formatKr(gap)} i potentiale
           </div>
+          {/* Forsoner de to tal siden viser: dette er samme størrelse som
+              listekortets "Upside" (mod udbud). Alpha i KPI-rækken nedenfor
+              måler mod investeret, altså efter købsomkostninger — derfor er
+              den lavere. Uden denne linje ser det ud som to modstridende tal. */}
+          {c.v3Alpha !== null && c.v3Alpha !== undefined && (
+            <div className="mt-1 text-[11px] tabular-nums text-slate-400">
+              α efter købsomkostninger: {(c.v3Alpha * 100).toFixed(1)} %
+            </div>
+          )}
         </div>
       </div>
     </div>

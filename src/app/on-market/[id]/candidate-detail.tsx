@@ -2314,7 +2314,13 @@ function FmvComparison({
       muted: iBuyRealSource === 'list-price-fallback',
     },
     {
-      label: 'Comp-engine',
+      label: 'Comp-engine · P10',
+      ppm: compEngine?.p10Ppm ?? null,
+      basis: 'lav ende — kun 10 % af comps handlede lavere. Holder casen her, hviler den ikke på held',
+      muted: !compEngine,
+    },
+    {
+      label: 'Comp-engine · median',
       ppm: compEngine?.medianPpm ?? null,
       basis: compEngine
         ? `${compEngine.compCount} comps ${TIER_LABEL[compEngine.fallbackTier] ?? compEngine.fallbackTier}` +
@@ -2324,9 +2330,9 @@ function FmvComparison({
       muted: !compEngine || compEngine.requiresManualReview,
     },
     {
-      label: 'Comp-engine P10',
-      ppm: compEngine?.p10Ppm ?? null,
-      basis: 'konservativ ende — holder casen også her?',
+      label: 'Comp-engine · P90',
+      ppm: compEngine?.p90Ppm ?? null,
+      basis: 'høj ende — loftet hvis boligen er blandt de bedste i sit felt',
       muted: !compEngine,
     },
     {

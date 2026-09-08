@@ -956,6 +956,7 @@ export function CandidateDetail({
             iBuyRealFmv={live.fmv}
             iBuyRealSource={c.v3FmvSource}
             publicValuation={c.publicValuation}
+            compEngine={c.compEngine}
           />
 
           {/* Scenarie-kort med fuld breakdown */}
@@ -2242,6 +2243,14 @@ function ThesisStat({
 
 // ─── FmvComparison — 3-way AVM kr/m² sammenligning ──────────────────────────
 
+/**
+ * Alle vurderinger af samme bolig, side om side.
+ *
+ * Siden havde tre forskellige comp-baserede tal spredt tre steder — vores
+ * Resight-median, Resight strong comps, og comp-enginens vægtede median —
+ * alle kaldt "comps". De svarer på forskellige spørgsmål og er derfor
+ * forskellige; pointen er at se HVOR de er uenige, ikke at gemme det væk.
+ */
 function FmvComparison({
   candidateId,
   kvm,
@@ -2249,6 +2258,7 @@ function FmvComparison({
   iBuyRealFmv,
   iBuyRealSource,
   publicValuation,
+  compEngine,
 }: {
   candidateId: string;
   kvm: number;
@@ -2256,12 +2266,16 @@ function FmvComparison({
   iBuyRealFmv: number;
   iBuyRealSource: string | null;
   publicValuation: number | null;
+  compEngine: OnMarketCandidate['compEngine'];
 }) {
   const [compData, setCompData] = useState<{
     medianPerSqm: number | null;
     compBasedFmv: number | null;
     sampleSize: number;
     scope: 'postnr' | 'bydel';
+    strongCompsMedian: number | null;
+    strongCompsCount: number;
+    strongCompsTier: string;
   } | null>(null);
 
   useEffect(() => {
@@ -2271,90 +2285,132 @@ function FmvComparison({
       .catch(() => {});
   }, [candidateId]);
 
-  const ppm = (total: number | null | undefined) =>
-    total && kvm > 0 ? total / kvm : null;
+  const listPpm = kvm > 0 ? listPrice / kvm : 0;
+  const pct = (ppm: number | null) =>
+    ppm && listPpm > 0 ? ((ppm - listPpm) / listPpm) * 100 : null;
 
-  const listPpm = ppm(listPrice);
-  const ibrPpm = ppm(iBuyRealFmv);
-  const compPpm = compData?.medianPerSqm ?? null;
-  const pubPpm = ppm(publicValuation);
-
-  // Implied iBuyReal alpha (vs udbud)
-  const ibrVsList = listPrice > 0 ? ((iBuyRealFmv - listPrice) / listPrice) * 100 : 0;
-  const compVsList =
-    listPrice > 0 && compData?.compBasedFmv
-      ? ((compData.compBasedFmv - listPrice) / listPrice) * 100
-      : null;
+  const rows: {
+    label: string;
+    ppm: number | null;
+    basis: string;
+    strong?: boolean;
+    muted?: boolean;
+  }[] = [
+    {
+      label: 'Udbudspris',
+      ppm: listPpm,
+      basis: 'Boligsiden — det sælger forlanger',
+      strong: true,
+    },
+    {
+      label: iBuyRealSource === 'manual' ? 'Manuel FMV' : 'iBuyReal AVM',
+      ppm: kvm > 0 ? iBuyRealFmv / kvm : null,
+      basis:
+        iBuyRealSource === 'ibuyreal-avm'
+          ? 'XGBoost — ét punktestimat, kender ikke stand'
+          : iBuyRealSource === 'manual'
+          ? 'manuelt sat'
+          : 'listpris-fallback (ingen AVM)',
+      muted: iBuyRealSource === 'list-price-fallback',
+    },
+    {
+      label: 'Comp-engine',
+      ppm: compEngine?.medianPpm ?? null,
+      basis: compEngine
+        ? `${compEngine.compCount} comps ${TIER_LABEL[compEngine.fallbackTier] ?? compEngine.fallbackTier}` +
+          `, median ${Math.round(compEngine.medianDistanceM)} m væk` +
+          (compEngine.requiresManualReview ? ' · kræver manuel vurdering' : ` · ${compEngine.confidenceLabel} confidence`)
+        : 'ikke hentet for denne adresse',
+      muted: !compEngine || compEngine.requiresManualReview,
+    },
+    {
+      label: 'Comp-engine P10',
+      ppm: compEngine?.p10Ppm ?? null,
+      basis: 'konservativ ende — holder casen også her?',
+      muted: !compEngine,
+    },
+    {
+      label: 'Resight — strong comps',
+      ppm: compData?.strongCompsMedian ?? null,
+      basis: compData
+        ? `${compData.strongCompsCount} handler der bekræfter tesen · ${compData.strongCompsTier}`
+        : 'henter…',
+      muted: !compData?.strongCompsMedian,
+    },
+    {
+      label: 'Resight — bred median',
+      ppm: compData?.medianPerSqm ?? null,
+      basis: compData
+        ? `${compData.sampleSize} handler i ${compData.scope === 'postnr' ? 'pris-klyngen' : 'bydelen'}, 4 år`
+        : 'henter…',
+      muted: true,
+    },
+    {
+      label: 'Offentlig vurdering',
+      ppm: publicValuation && kvm > 0 ? publicValuation / kvm : null,
+      basis: 'SKAT — typisk 30-50 % under marked, kun reference',
+      muted: true,
+    },
+  ];
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h3 className="mb-4 text-[13px] font-semibold tracking-tight text-slate-900">
-        📊 FMV-sammenligning — 3 uafhængige værdiansættelser
+      <h3 className="text-[13px] font-semibold tracking-tight text-slate-900">
+        Vurderinger side om side
       </h3>
+      <p className="mt-1 mb-4 text-xs text-slate-500">
+        Peger flere uafhængige metoder samme vej, er signalet stærkt. Er de uenige,
+        er dét i sig selv informationen — se hvilken der skiller sig ud og hvorfor.
+      </p>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-        {/* Udbudspris (reference) */}
-        <FmvCard
-          tone="neutral"
-          label="Udbudspris"
-          sub="Boligsiden (sælger)"
-          total={listPrice}
-          ppm={listPpm}
-          deltaVsList={0}
-          showDelta={false}
-        />
-
-        {/* iBuyReal AVM */}
-        <FmvCard
-          tone={iBuyRealSource === 'ibuyreal-avm' || iBuyRealSource === 'manual' ? 'positive' : 'muted'}
-          label={iBuyRealSource === 'manual' ? 'Manuel FMV' : 'iBuyReal AVM'}
-          sub={
-            iBuyRealSource === 'ibuyreal-avm'
-              ? 'XGBoost (proprietær)'
-              : iBuyRealSource === 'manual'
-              ? 'manuelt sat'
-              : 'listPris fallback'
-          }
-          total={iBuyRealFmv}
-          ppm={ibrPpm}
-          deltaVsList={ibrVsList}
-          showDelta={iBuyRealSource !== 'list-price-fallback'}
-        />
-
-        {/* Comparable-based estimate (Boliga-style) */}
-        <FmvCard
-          tone={compData?.compBasedFmv ? 'positive' : 'muted'}
-          label="Comp-baseret"
-          sub={
-            compData
-              ? `median ${compData.scope === 'postnr' ? 'postnr' : 'bydel'} · n=${compData.sampleSize}`
-              : 'henter…'
-          }
-          total={compData?.compBasedFmv ?? null}
-          ppm={compPpm}
-          deltaVsList={compVsList}
-          showDelta={compVsList !== null}
-        />
-
-        {/* Offentlig vurdering (SKAT) */}
-        <FmvCard
-          tone="muted"
-          label="Offentlig vurdering"
-          sub="SKAT (typisk forældet)"
-          total={publicValuation}
-          ppm={pubPpm}
-          deltaVsList={publicValuation && listPrice > 0 ? ((publicValuation - listPrice) / listPrice) * 100 : null}
-          showDelta={!!publicValuation}
-        />
-      </div>
-
-      {/* Konsensus-rationale */}
-      <div className="mt-4 rounded-md border border-slate-100 bg-slate-50/60 p-3 text-xs text-slate-600">
-        <strong className="text-slate-700">Læsevejledning:</strong> Hvis 2-3 uafhængige metoder
-        peger samme vej (fx alle siger underpriset), styrker det signalet. Hvis kun iBuyReal AVM
-        afviger og comp-baseret + offentlig vurdering er enige med udbud, kan AVM'en være over-
-        eller undershooter på denne case. Offentlig vurdering er ofte 30-50% under markedspris
-        (især nyere bygninger) — primært til reference.
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-slate-200 text-left text-[11px] font-medium uppercase tracking-wider text-slate-400">
+              <th className="pb-2 pr-4 font-medium">Kilde</th>
+              <th className="pb-2 pr-4 text-right font-medium">kr/m²</th>
+              <th className="pb-2 pr-4 text-right font-medium">I alt</th>
+              <th className="pb-2 pr-4 text-right font-medium">vs udbud</th>
+              <th className="pb-2 font-medium">Grundlag</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => {
+              const delta = r.label === 'Udbudspris' ? null : pct(r.ppm);
+              return (
+                <tr key={r.label} className="border-b border-slate-100 last:border-0">
+                  <td
+                    className={
+                      'py-2.5 pr-4 whitespace-nowrap ' +
+                      (r.strong ? 'font-semibold text-slate-900' : r.muted ? 'text-slate-500' : 'text-slate-900')
+                    }
+                  >
+                    {r.label}
+                  </td>
+                  <td className="py-2.5 pr-4 text-right tabular-nums text-slate-900">
+                    {r.ppm ? Math.round(r.ppm).toLocaleString('da-DK') : '–'}
+                  </td>
+                  <td className="py-2.5 pr-4 text-right tabular-nums text-slate-500">
+                    {r.ppm && kvm > 0 ? formatKr(r.ppm * kvm) : '–'}
+                  </td>
+                  <td
+                    className={
+                      'py-2.5 pr-4 text-right font-medium tabular-nums ' +
+                      (delta === null
+                        ? 'text-slate-300'
+                        : delta >= 0
+                        ? 'text-emerald-600'
+                        : 'text-rose-600')
+                    }
+                  >
+                    {delta === null ? '–' : `${delta >= 0 ? '+' : ''}${delta.toFixed(1)} %`}
+                  </td>
+                  <td className="py-2.5 text-xs text-slate-500">{r.basis}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   );

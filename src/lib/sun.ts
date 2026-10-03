@@ -12,7 +12,12 @@
  */
 
 const SOLNU_URL = process.env.SOLNU_URL ?? 'https://solnu-kbh.vercel.app';
-const DAWA_URL = 'https://api.dataforsyningen.dk';
+// Den officielle DAWA (api.dataforsyningen.dk) blev lukket permanent af
+// staten 1. oktober 2026 — alle kald gav 410 Gone. Peger på companydata.dk's
+// byte-for-byte kompatible spejl (samme felter/stier/JSON-form, gratis,
+// ingen nøgle) i stedet. Se tilsvarende rettelse + begrundelse i crm-v2's
+// src/lib/services/dawa.ts.
+const DAWA_URL = 'https://dawa.companydata.dk';
 
 export interface SunProfile {
   score: number;
